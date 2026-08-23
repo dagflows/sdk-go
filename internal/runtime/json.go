@@ -26,7 +26,7 @@ func newCompactEncoder() *compactEncoder {
 // encode converts a value to compact JSON bytes, valid until the next call.
 func (c *compactEncoder) encode(value any) ([]byte, error) {
 	c.buf.Reset()
-	
+
 	if err := c.enc.Encode(value); err != nil {
 		return nil, err
 	}

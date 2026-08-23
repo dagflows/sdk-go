@@ -96,9 +96,9 @@ func export(ctx *dagflows.Ctx, inputs *dagflows.Inputs) (any, error) {
 
 func fails(*dagflows.Ctx, *dagflows.Inputs) (any, error) {
 	return nil, &dagflows.Fail{
-		Message:    "upstream returned 503",
-		Category:   dagflows.INFRASTRUCTURE,
-		Abort:      new(false),
+		Message:  "upstream returned 503",
+		Category: dagflows.INFRASTRUCTURE,
+		Abort:    new(false),
 	}
 }
 

@@ -127,8 +127,8 @@ var guards = []guard{
 	{
 		name: "result: a panic mid stream aborts the upload",
 		file: "internal/runtime/result.go",
-		old:  "\tcommitted := false\n\n\tdefer func() {\n\t\tif !committed {\n\t\t\tsink.Abort()\n\t\t}\n\t}()\n",
-		new:  "\tcommitted := false\n\n\t_ = committed\n",
+		old:  "\tcommitted := false\n\tdefer func() {\n\t\tif !committed {\n\t\t\tsink.Abort()\n\t\t}\n\t}()\n",
+		new:  "\tcommitted := false\n\t_ = committed\n",
 		pkg:  "./internal/runtime", run: "TestAPanicMidStreamAbortsTheUploadToo",
 	},
 	{
@@ -176,8 +176,8 @@ var guards = []guard{
 	{
 		name: "http: network failures are retryable infrastructure",
 		file: "internal/runtime/http.go",
-		old:  "\t\tCategory: INFRASTRUCTURE,\n\t\tAbort:    new(false),\n\t}\n}\n\nfunc uploadedNothing",
-		new:  "\t\tCategory: PERMANENT,\n\t}\n}\n\nfunc uploadedNothing",
+		old:  "\t\tCategory: INFRASTRUCTURE,\n\t\tAbort:    new(false),\n\t}\n}\n\n// uploadedNothing",
+		new:  "\t\tCategory: PERMANENT,\n\t}\n}\n\n// uploadedNothing",
 		pkg:  "./internal/runtime", run: "TestAFailedReadIsRetryableOnTheWorkflowPolicy",
 	},
 	{
@@ -274,8 +274,8 @@ var guards = []guard{
 	{
 		name: "authoring: the manifest keeps python's key order",
 		file: "internal/authoring/manifest.go",
-		old:  "\tV        int             `json:\"v\"`\n\tRuntime  RuntimeManifest `json:\"runtime\"`\n",
-		new:  "\tRuntime  RuntimeManifest `json:\"runtime\"`\n\tV        int             `json:\"v\"`\n",
+		old:  "\tV        int              `json:\"v\"`\n\tRuntime  RuntimeManifest   `json:\"runtime\"`\n",
+		new:  "\tRuntime  RuntimeManifest  `json:\"runtime\"`\n\tV        int               `json:\"v\"`\n",
 		pkg:  ".", run: "TestTheAcceptanceFixtureIsByteStable",
 	},
 	{
@@ -288,8 +288,8 @@ var guards = []guard{
 	{
 		name: "cli: check never writes the file",
 		file: "internal/cli/build.go",
-		old:  "\t\treturn fail(\"%s does not exist yet; run: %s\", out, regenerate)",
-		new:  "\t\tencoded, _ := body.Encode()\n\t\t_ = os.WriteFile(out, encoded, 0o644)\n\t\treturn fail(\"%s does not exist yet; run: %s\", out, regenerate)",
+		old:  "\t\treturn fail(\"%s does not exist yet, run: %s\", out, regenerate)",
+		new:  "\t\tencoded, _ := body.Encode()\n\t\t_ = os.WriteFile(out, encoded, 0o644)\n\t\treturn fail(\"%s does not exist yet, run: %s\", out, regenerate)",
 		pkg:  ".", run: "TestCheckDoesNotWriteTheFile",
 	},
 	{
