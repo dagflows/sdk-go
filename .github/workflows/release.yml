@@ -1,0 +1,44 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  GOWORK: off
+
+jobs:
+  release:
+    # Verify tag constraints and run validation before publication.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: the tag's major tracks the manifest version
+        # Ensure major version matches manifest version.
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          major="${tag#v}"; major="${major%%.*}"
+          manifest=$(grep -E 'const ManifestVersion = ' internal/authoring/manifest.go | grep -oE '[0-9]+')
+          echo "tag=$tag major=$major manifest=v$manifest"
+          test "$major" = "$manifest" || test "$major" = "0"
+          if [ "$major" -ge 2 ]; then
+            grep -q "^module github.com/dagflows/sdk-go/v$major\$" go.mod || (echo "a v$major tag needs the /v$major module path"; exit 1)
+          fi
+
+      - name: test before the tag is trusted
+        run: go test ./...
+
+      - name: the guards are real
+        run: go run ./scripts/guards
+
+      - name: the module resolves at the tag
+        # Warm proxy cache for tagged version.
+        run: |
+          GOFLAGS=-mod=mod GOPROXY=https://proxy.golang.org go list -m "github.com/dagflows/sdk-go@${GITHUB_REF_NAME}" || echo "not yet visible on the proxy, consumers fetch it on first use"

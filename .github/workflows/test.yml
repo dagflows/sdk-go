@@ -1,0 +1,125 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Run without go.work so go.sum issues are caught.
+  GOWORK: off
+  # Test the exact toolchain version named in the matrix.
+  GOTOOLCHAIN: local
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The two newest Go releases, development happens on Windows too.
+        go: ["1.26.x", "stable"]
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: test
+        run: go test ./...
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+
+      - name: vet
+        run: go vet ./...
+
+      - name: staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
+
+      - name: go.mod and go.sum are tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+  guards:
+    # Verify tests fail when intentional bugs are reintroduced.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: guards
+        run: go run ./scripts/guards
+
+  package:
+    # Build and run the example binary end to end like production.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: build the example as the builder does
+        working-directory: testdata/example
+        run: CGO_ENABLED=0 go build -v -trimpath -ldflags '-s -w -buildid=' -o ../../bin/app .
+
+      - name: the binary is static
+        run: |
+          file bin/app | tee /dev/stderr | grep -q 'statically linked'
+          ! ldd bin/app 2>/dev/null
+
+      - name: no executable is named dagflows
+        run: |
+          test ! -e bin/dagflows
+          test ! -e "$(go env GOPATH)/bin/dagflows"
+
+      - name: the CLI answers with the right exit codes
+        run: |
+          bin/app --help
+          bin/app nonsense && exit 1 || test $? -eq 2
+          bin/app build validate
+
+      - name: the emitter writes the manifest the builder reads
+        run: |
+          bin/app build manifest -o dagflows-manifest.json
+          bin/app build manifest -o dagflows-manifest.json --check
+
+      - name: a node runs end to end through the worker's argv
+        run: |
+          cat > in.json <<'EOF'
+          {"ctx": {"node_key": "compute", "entrypoint": "app", "inline_max_bytes": 262144},
+           "payload": {"inputs": {"seed": {"type": "INLINE", "data": {"factor": 3}}}}}
+          EOF
+          DAGFLOWS_INPUT=in.json DAGFLOWS_OUTPUT=out.json bin/app
+          cat out.json
+          grep -q '"value":42' out.json
+
+      - name: a node runs through dev run
+        run: |
+          echo '[{"id":1},{"id":2}]' > rows.json
+          bin/app dev run count --input seed=rows.json | tee run.txt
+          grep -q '"rows": 2' run.txt
