@@ -1,0 +1,18 @@
+# Build and test leftovers
+/dist/
+/bin/
+*.test
+*.out
+
+# Local fixtures for DAGFLOWS_INPUT=./fixture.json runs
+fixture*.json
+/dagflows-manifest.json
+/testdata/*/dagflows-manifest.json
+
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+internal_refs/
