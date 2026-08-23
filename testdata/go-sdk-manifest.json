@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "runtime": {
+    "language": "go",
+    "version": "1.26"
+  },
+  "workflow": {
+    "name": "branching-demo",
+    "max_concurrent_nodes": 5
+  },
+  "nodes": [
+    {
+      "key": "step_1",
+      "entrypoint": "app",
+      "config": {
+        "memory_limit_mb": 256
+      }
+    },
+    {
+      "key": "step_2",
+      "entrypoint": "app",
+      "depends": [
+        "step_1"
+      ],
+      "timeout_seconds": 30,
+      "config": {
+        "memory_limit_mb": 256
+      },
+      "retry": {
+        "max_attempts": 2,
+        "initial_backoff_ms": 1000
+      }
+    },
+    {
+      "key": "report",
+      "entrypoint": "app",
+      "depends": [
+        "step_2"
+      ],
+      "external_depends": [
+        "crunch"
+      ]
+    }
+  ]
+}
