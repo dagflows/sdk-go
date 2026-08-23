@@ -1,0 +1,7 @@
+module example.com/shapes
+
+go 1.26
+
+require github.com/dagflows/sdk-go v0.0.0
+
+replace github.com/dagflows/sdk-go => ../..
