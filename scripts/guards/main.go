@@ -274,8 +274,8 @@ var guards = []guard{
 	{
 		name: "authoring: the manifest keeps python's key order",
 		file: "internal/authoring/manifest.go",
-		old:  "\tV        int              `json:\"v\"`\n\tRuntime  RuntimeManifest   `json:\"runtime\"`\n",
-		new:  "\tRuntime  RuntimeManifest  `json:\"runtime\"`\n\tV        int               `json:\"v\"`\n",
+		old:  "\tV        int               `json:\"v\"`\n\tRuntime  RuntimeManifest   `json:\"runtime\"`\n",
+		new:  "\tRuntime  RuntimeManifest   `json:\"runtime\"`\n\tV        int               `json:\"v\"`\n",
 		pkg:  ".", run: "TestTheAcceptanceFixtureIsByteStable",
 	},
 	{
