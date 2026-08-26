@@ -6,6 +6,9 @@ import "iter"
 const (
 	InputEnv  = "DAGFLOWS_INPUT"
 	OutputEnv = "DAGFLOWS_OUTPUT"
+	// ReadyFDEnv names the descriptor the agent listens on for the runtime's
+	// ready signal.
+	ReadyFDEnv = "DAGFLOWS_READY_FD"
 )
 
 // Block types used in payload envelopes.
