@@ -366,6 +366,11 @@ func (o *devOptions) addInput(spec string) error {
 			return fail("--input %s: %s", name, err)
 		}
 
+		// Promote JSON array files to NDJSON so they iterate as rows, matching inline inputs.
+		if _, isList := data.([]any); isList && contentType == runtime.JSON {
+			contentType = runtime.NDJSON
+		}
+
 		o.inputs = append(o.inputs, entryOf(name, runtime.INLINE, contentType, data))
 
 		return nil

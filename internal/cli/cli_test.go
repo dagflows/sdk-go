@@ -141,12 +141,17 @@ func TestInputSpecsBecomeEntries(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "rows.jsonl"), []byte("{\"n\": 1}\n\n{\"n\": 2}\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "note.txt"), []byte("hello"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "rows.json"), []byte(`[{"n": 1}, {"n": 2}]`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "one.json"), []byte(`{"n": 1}`), 0o644))
 
 	var options devOptions
 	require.NoError(t, options.addInput("a="+filepath.Join(dir, "rows.jsonl")))
 	require.NoError(t, options.addInput("b="+filepath.Join(dir, "note.txt")))
 	require.NoError(t, options.addInput(`c={"n": 1}`))
 	require.NoError(t, options.addInput(`d=[1, 2]`))
+	// A list is rows whichever way it arrives, and an object is still one value.
+	require.NoError(t, options.addInput("e="+filepath.Join(dir, "rows.json")))
+	require.NoError(t, options.addInput("f="+filepath.Join(dir, "one.json")))
 
 	encoded, err := json.Marshal(options.inputs)
 	require.NoError(t, err)
@@ -154,7 +159,9 @@ func TestInputSpecsBecomeEntries(t *testing.T) {
 		"a": {"type": "INLINE", "content_type": "application/x-ndjson", "data": [{"n": 1}, {"n": 2}]},
 		"b": {"type": "INLINE", "content_type": "text/plain", "data": "hello"},
 		"c": {"type": "INLINE", "content_type": "application/json", "data": {"n": 1}},
-		"d": {"type": "INLINE", "content_type": "application/x-ndjson", "data": [1, 2]}
+		"d": {"type": "INLINE", "content_type": "application/x-ndjson", "data": [1, 2]},
+		"e": {"type": "INLINE", "content_type": "application/x-ndjson", "data": [{"n": 1}, {"n": 2}]},
+		"f": {"type": "INLINE", "content_type": "application/json", "data": {"n": 1}}
 	}`, string(encoded))
 
 	err = options.addInput("no-equals-sign")
