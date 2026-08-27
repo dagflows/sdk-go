@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version-file: go.mod
 
       - name: the tag's major tracks the manifest version
         # Ensure major version matches manifest version.
