@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,9 +23,7 @@ func node(t *testing.T, handler Handler, ctx map[string]any, inputs map[string]a
 		"inline_max_bytes": 1 << 20,
 	}
 
-	for key, value := range ctx {
-		rawCtx[key] = value
-	}
+	maps.Copy(rawCtx, ctx)
 
 	if inputs == nil {
 		inputs = map[string]any{}
