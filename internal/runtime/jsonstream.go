@@ -9,10 +9,43 @@ import (
 	"unicode"
 )
 
+// source records whether the underlying stream ran out. What the decoder calls
+// a document that simply stops is not stable across Go versions: 1.26 reported
+// io.EOF, 1.27 reports a *json.SyntaxError reading "unexpected end of JSON
+// input", and 1.27 also keeps More() true at the end of a truncated array where
+// 1.26 turned it false. Asking the reader whether it reached the end is the same
+// question with an answer that does not move.
+type source struct {
+	r       io.Reader
+	drained bool
+}
+
+func (s *source) Read(p []byte) (int, error) {
+	n, err := s.r.Read(p)
+	if errors.Is(err, io.EOF) {
+		s.drained = true
+	}
+
+	return n, err
+}
+
+func (s *source) endedEarly(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	var syntax *json.SyntaxError
+
+	return s.drained && errors.As(err, &syntax)
+}
+
 // iterJSONArray streams elements from a top-level JSON array in r.
 func iterJSONArray(r io.Reader) rows {
 	return func(yield func(any, error) bool) {
-		dec := json.NewDecoder(r)
+		src := &source{
+			r: r,
+		}
+		dec := json.NewDecoder(src)
 		dec.UseNumber()
 
 		open, err := dec.Token()
@@ -40,7 +73,7 @@ func iterJSONArray(r io.Reader) rows {
 			var element any
 
 			if err := dec.Decode(&element); err != nil {
-				yield(nil, elementError(dec, err))
+				yield(nil, elementError(dec, src, err))
 				return
 			}
 
@@ -51,7 +84,7 @@ func iterJSONArray(r io.Reader) rows {
 
 		// Read the closing array bracket or detect unexpected EOF.
 		if _, err := dec.Token(); err != nil {
-			if err == io.EOF || errors.Is(err, io.ErrUnexpectedEOF) {
+			if src.endedEarly(err) {
 				yield(nil, errors.New("the array is never closed, the reference ended mid document"))
 				return
 			}
@@ -62,10 +95,10 @@ func iterJSONArray(r io.Reader) rows {
 }
 
 // elementError distinguishes unclosed arrays from truncated element values at EOF.
-func elementError(dec *json.Decoder, err error) error {
-	if err == io.EOF || errors.Is(err, io.ErrUnexpectedEOF) {
+func elementError(dec *json.Decoder, src *source, err error) error {
+	if src.endedEarly(err) {
 		pending, _ := io.ReadAll(dec.Buffered())
-		if strings.TrimSpace(string(pending)) == "" {
+		if strings.Trim(string(pending), " \t\r\n,") == "" {
 			return errors.New("the array is never closed, the reference ended mid document")
 		}
 
