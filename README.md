@@ -65,9 +65,7 @@ func main() {
 }
 ```
 
-`dagflows.Main()` never returns. With `DAGFLOWS_INPUT` set it runs the node
-the envelope names and exits 0, reporting through `DAGFLOWS_OUTPUT`.
-Otherwise it answers the build and dev commands below.
+`dagflows.Main()` never returns. With `DAGFLOWS_INPUT` set it runs the node the envelope names and exits 0, reporting through `DAGFLOWS_OUTPUT`. Otherwise it answers the build and dev commands below.
 
 ### Handler signature
 
@@ -77,12 +75,9 @@ Every handler has one signature, and the compiler is the binding validator:
 func step(ctx *dagflows.Ctx, inputs *dagflows.Inputs) (any, error)
 ```
 
-Name what you do not use `_`. Numbers in decoded inputs are `json.Number`,
-so an integer beyond float64 precision survives a trip through a node.
+Name what you do not use `_`. Numbers in decoded inputs are `json.Number`, so an integer beyond float64 precision survives a trip through a node.
 
-The node key defaults to the function's name; set `Key` to choose another.
-Invalid keys, duplicate keys and negative settings are reported by
-`build manifest` and `build validate`, as one clean line at your terminal.
+The node key defaults to the function's name; set `Key` to choose another. Invalid keys, duplicate keys and negative settings are reported by `build manifest` and `build validate`, as one clean line at your terminal.
 
 ## Node configuration
 
@@ -121,13 +116,25 @@ func main() {
 }
 ```
 
-`Timeout` is in seconds. Declaring `MaxOutputMB` is what gets a node a
-multipart upload, letting it emit more than it can hold.
+`Timeout` is in seconds. Declaring `MaxOutputMB` is what gets a node a multipart upload, letting it emit more than it can hold.
+
+`MaxAttempts` counts the first run, so `1` means run once and do not retry. Backoff doubles per attempt up to `MaxBackoffMs`.
+
+Leaving a setting out is not the same as setting it to zero, which is why they are pointers: unstated means the platform decides, and that is what lets a workflow default reach a node at all. `new(5)` states one inline.
+
+By default only the platform's own failures are retried. `RetryOn` widens that, and `RetryCategory` names what can be asked for:
+
+| constant | what it means |
+| --- | --- |
+| `RetryOnInfrastructure` | the platform could not run the node |
+| `RetryOnTimeout` | the node ran out of its time budget |
+| `RetryOnExecution` | the node itself failed |
+
+There is no constant for `permanent` on purpose: the platform reports it when running the node again cannot change the outcome, so asking to retry it is refused.
 
 ### Cross-project dependencies
 
-`Depends` takes the handles `Node` returned, never strings, so a typo fails
-to compile. A node in another project is the one thing you name by key:
+`Depends` takes the handles `Node` returned, never strings, so a typo fails to compile. A node in another project is the one thing you name by key:
 
 ```go
 wf.Node(fulfillOrder, dagflows.NodeOptions{
@@ -160,17 +167,14 @@ defer body.Close()
 io.Copy(sink, body)
 ```
 
-Iteration yields one **record** at a time for row oriented payloads, which
-is what lets a node read more than it can hold. A JSON input has no records,
-so it yields the whole document as a single item.
+Iteration yields one **record** at a time for row oriented payloads, which is what lets a node read more than it can hold. A JSON input has no records, so it yields the whole document as a single item.
 
 | content type | `for x, err := range handle.Iter()` yields |
 | --- | --- |
 | `application/x-ndjson`, `text/csv` | one row at a time |
 | `application/json` | the whole document, once |
 
-Iteration re-opens the source each pass, so looping twice costs a second
-read rather than silently yielding nothing the second time.
+Iteration re-opens the source each pass, so looping twice costs a second read rather than silently yielding nothing the second time.
 
 If a node has exactly one parent, use `inputs.One()`:
 
@@ -196,10 +200,7 @@ return dagflows.Result{Output: map[string]any{}, Stop: true}, nil
 return dagflows.Result{Output: parent.Iter(), ContentType: dagflows.NDJSON}, nil
 ```
 
-A handler may return any `iter.Seq[T]` or `iter.Seq2[T, error]`; its rows
-are encoded lazily and offloaded to storage when they outgrow the inline
-limit. You never choose inline versus reference: the platform decides from
-what it offered the run and what the node returned.
+A handler may return any `iter.Seq[T]` or `iter.Seq2[T, error]`, its rows are encoded lazily and offloaded to storage when they outgrow the inline limit. You never choose inline versus reference: the platform decides from what it offered the run and what the node returned.
 
 To decide routing from what was streamed, write through `ctx.OutputStream`:
 
@@ -222,31 +223,24 @@ ref, err := out.Ref()
 return dagflows.Result{Output: ref, Next: []string{branchFor(written)}}, nil
 ```
 
-`Close` commits; the deferred `Abort` discards a partial upload when the
-handler fails first, and does nothing after a successful `Close`.
+`Close` commits; the deferred `Abort` discards a partial upload when the handler fails first, and does nothing after a successful `Close`.
 
 ## Error handling
 
-Return a `*dagflows.Fail` to signal a structured failure with retry
-instructions. Any other error is reported as permanent:
+Return a `*dagflows.Fail` to signal a structured failure with retry instructions. Any other error is reported as permanent:
 
 ```go
 return nil, &dagflows.Fail{Message: "Payment gateway unavailable", Category: dagflows.EXECUTION, RetryAfter: 30}
 ```
 
-Naming a delay implies "retry me"; naming nothing aborts. `Abort: new(false)`
-with no delay leaves retry timing to the workflow's policy. Categories:
-`EXECUTION`, `INFRASTRUCTURE`, `TIMEOUT`, `PERMANENT`. Anything else
-collapses to permanent, because an unknown category must never silently
+Naming a delay implies "retry me"; naming nothing aborts. `Abort: new(false)` with no delay leaves retry timing to the workflow's policy. Categories: `EXECUTION`, `INFRASTRUCTURE`, `TIMEOUT`, `PERMANENT`. Anything else collapses to permanent, because an unknown category must never silently
 become retryable.
 
-Errors the SDK returns are matchable with `errors.AsType` and `errors.Is`:
-`InputTooLarge`, `InputUnavailable`, `OutputTooLarge`.
+Errors the SDK returns are matchable with `errors.AsType` and `errors.Is`: `InputTooLarge`, `InputUnavailable`, `OutputTooLarge`.
 
 ## Command line interface
 
-The node binary is the CLI. In the module, `go run . <command>`; once built,
-`./app <command>`.
+The node binary is the CLI. In the module, `go run . <command>`; once built, `./app <command>`.
 
 ### Manifest management
 
@@ -261,16 +255,11 @@ go run . build manifest -o dagflows-manifest.json --check
 go run . build validate
 ```
 
-The builder generates the manifest itself by default (`manifests: generate`
-in `dagflows.yaml`), by compiling your module root to `bin/app` and running
-`./bin/app build manifest -o dagflows-manifest.json`, the same command as
-above. To commit the manifest instead, set `manifests: committed` and keep
-the file honest in CI with `--check`.
+The builder generates the manifest itself by default (`manifests: generate` in `dagflows.yaml`), by compiling your module root to `bin/app` and running `./bin/app build manifest -o dagflows-manifest.json`, the same command as above. To commit the manifest instead, set `manifests: committed` and keep the file honest in CI with `--check`.
 
 ### Local development
 
-`dev fixture` writes a starting input envelope and prints the command that
-runs the node against it:
+`dev fixture` writes a starting input envelope and prints the command that runs the node against it:
 
 ```bash
 go run . dev fixture calculate_totals --input fetch_orders=orders.json -o m.json
@@ -296,17 +285,11 @@ Options worth knowing:
 --keep-fixture <path>         write the envelope instead of discarding it
 ```
 
-Every command takes `--json` for machine readable output. Exit codes are
-`0` success, `1` the operation failed, `2` the command was wrong. A node run
-by the platform exits `0` even when it failed: the failure, its category and
-its retry directive travel in the output envelope, which the worker reads
-only on a clean exit.
+Every command takes `--json` for machine readable output. Exit codes are `0` success, `1` the operation failed, `2` the command was wrong. A node run by the platform exits `0` even when it failed: the failure, its category and its retry directive travel in the output envelope, which the worker reads only on a clean exit.
 
 ## Versioning
 
-Releases are git tags. The module's major tracks the manifest version:
-v1.x while the manifest is `"v": 1`. `dagflows.Version()` reports the
-module version a binary was built against.
+Releases are git tags. The module's major tracks the manifest version: v1.x while the manifest is `"v": 1`. `dagflows.Version()` reports the module version a binary was built against.
 
 ## License
 
