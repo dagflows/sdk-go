@@ -24,6 +24,8 @@ type WorkflowOptions struct {
 	Version            string
 	MaxConcurrentNodes int
 	MaxCycleCount      int
+	// Retry sets default retry settings inherited and overridden field-by-field by nodes.
+	Retry *RetryConfig
 }
 
 // NodeOptions configures an individual node registration.
@@ -62,6 +64,7 @@ type Workflow struct {
 	Version            string
 	MaxConcurrentNodes int
 	MaxCycleCount      int
+	Retry              *RetryConfig
 
 	nodes    []*NodeManifest
 	handlers map[string]runtime.Handler
@@ -80,6 +83,7 @@ func NewWorkflow(name string, opts WorkflowOptions) *Workflow {
 		Version:            opts.Version,
 		MaxConcurrentNodes: opts.MaxConcurrentNodes,
 		MaxCycleCount:      opts.MaxCycleCount,
+		Retry:              opts.Retry,
 		handlers:           map[string]runtime.Handler{},
 	}
 
@@ -89,6 +93,12 @@ func NewWorkflow(name string, opts WorkflowOptions) *Workflow {
 
 	if opts.MaxConcurrentNodes < 0 || opts.MaxCycleCount < 0 {
 		wf.fail(errors.New("workflow limits cannot be negative"))
+	}
+
+	if opts.Retry != nil {
+		if err := opts.Retry.validate(); err != nil {
+			wf.fail(fmt.Errorf("workflow retry default: %w", err))
+		}
 	}
 
 	declaredMu.Lock()
@@ -249,6 +259,10 @@ func (wf *Workflow) Manifest() (*Manifest, error) {
 			Name:               wf.Name,
 			MaxConcurrentNodes: wf.MaxConcurrentNodes,
 			MaxCycleCount:      wf.MaxCycleCount,
+		}
+
+		if wf.Retry != nil {
+			out.Workflow.Retry = wf.Retry.asManifest()
 		}
 	}
 

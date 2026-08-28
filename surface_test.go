@@ -99,8 +99,8 @@ func TestTheWorkflowDeclaresAndEmitsInProcess(t *testing.T) {
 			MaxOutputMB:   1,
 		},
 		Retry: &dagflows.RetryConfig{
-			MaxAttempts:      3,
-			InitialBackoffMs: 500,
+			MaxAttempts:      new(3),
+			InitialBackoffMs: new(500),
 		},
 		Config: map[string]any{
 			"region": "eu",

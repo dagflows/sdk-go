@@ -130,7 +130,7 @@ func documentedProject(t *testing.T) string {
 	sdk, err := filepath.Abs(".")
 	require.NoError(t, err)
 
-	gomod := fmt.Sprintf("module example.com/readme\n\ngo 1.26\n\nrequire github.com/dagflows/sdk-go v0.0.0\n\nreplace github.com/dagflows/sdk-go => %q\n", filepath.ToSlash(sdk))
+	gomod := fmt.Sprintf("module example.com/readme\n\ngo 1.27\n\nrequire github.com/dagflows/sdk-go v0.0.0\n\nreplace github.com/dagflows/sdk-go => %q\n", filepath.ToSlash(sdk))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(gomod), 0o644))
 
 	gosum, err := os.ReadFile(filepath.Join("testdata", "example", "go.sum"))

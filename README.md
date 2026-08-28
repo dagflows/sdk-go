@@ -9,7 +9,7 @@ Go SDK for authoring and running Dagflows workflows.
 go get github.com/dagflows/sdk-go
 ```
 
-Requires Go 1.26+. The module depends on nothing outside the standard
+Requires Go 1.27+. The module depends on nothing outside the standard
 library, because everything it imports is linked into every tenant's node.
 
 ## Quickstart
@@ -99,12 +99,22 @@ func extractData(_ *dagflows.Ctx, _ *dagflows.Inputs) (any, error) {
 }
 
 func main() {
-	wf := dagflows.NewWorkflow("data_pipeline", dagflows.WorkflowOptions{})
+	wf := dagflows.NewWorkflow("data_pipeline", dagflows.WorkflowOptions{
+		// Every node inherits this; a node stating its own overrides it field
+		// by field, so the settings it leaves out still apply.
+		Retry: &dagflows.RetryConfig{MaxAttempts: new(3), InitialBackoffMs: new(1000)},
+	})
 
 	wf.Node(extractData, dagflows.NodeOptions{
 		Key:       "extract_data",
 		Execution: &dagflows.ExecutionConfig{Timeout: 300, MemoryLimitMB: 512},
-		Retry:     &dagflows.RetryConfig{MaxAttempts: 3, InitialBackoffMs: 1000},
+		// Only the platform's own failures are retried unless a node says
+		// otherwise. Settings are pointers so leaving one out means "let the
+		// platform decide" rather than zero, and new(5) states one inline.
+		Retry: &dagflows.RetryConfig{
+			MaxAttempts: new(5),
+			RetryOn:     []dagflows.RetryCategory{dagflows.RetryOnInfrastructure, dagflows.RetryOnTimeout},
+		},
 	})
 
 	dagflows.Main()

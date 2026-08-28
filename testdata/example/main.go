@@ -132,7 +132,8 @@ func main() {
 			MemoryLimitMB: 256,
 		},
 		Retry: &dagflows.RetryConfig{
-			MaxAttempts: 2,
+			MaxAttempts: new(2),
+			RetryOn:     []dagflows.RetryCategory{dagflows.RetryOnInfrastructure, dagflows.RetryOnTimeout},
 		},
 	})
 	wf.Node(export, dagflows.NodeOptions{

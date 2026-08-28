@@ -102,8 +102,18 @@ type NodeRef = authoring.NodeRef
 // ExecutionConfig defines resource requirements and timeout limits for a node.
 type ExecutionConfig = authoring.ExecutionConfig
 
-// RetryConfig defines retry attempts and initial backoff parameters for a node.
+// RetryConfig defines how a failed node is retried.
 type RetryConfig = authoring.RetryConfig
+
+// RetryCategory is a failure category a node may ask to retry.
+type RetryCategory = authoring.RetryCategory
+
+// Retry categories that nodes can opt into retrying.
+const (
+	RetryOnInfrastructure = authoring.RetryOnInfrastructure
+	RetryOnTimeout        = authoring.RetryOnTimeout
+	RetryOnExecution      = authoring.RetryOnExecution
+)
 
 // NewWorkflow initializes and registers a new Workflow definition.
 func NewWorkflow(name string, opts WorkflowOptions) *Workflow {

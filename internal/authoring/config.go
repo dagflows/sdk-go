@@ -1,7 +1,11 @@
 // Package authoring declares workflow DAG topologies and serializes the build manifest.
 package authoring
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
 
 // ExecutionConfig defines runtime resource constraints and timeout limits for a node.
 type ExecutionConfig struct {
@@ -39,31 +43,104 @@ func (c *ExecutionConfig) asConfig() []entry {
 	return out
 }
 
-// RetryConfig specifies node retry attempts and initial backoff.
+// RetryConfig configures optional node retry settings where unstated fields inherit platform defaults.
 type RetryConfig struct {
-	MaxAttempts      int
-	InitialBackoffMs int
+	// MaxAttempts includes the initial execution (1 means no retries).
+	MaxAttempts *int
+	// InitialBackoffMs is the starting delay that doubles per attempt up to MaxBackoffMs.
+	InitialBackoffMs *int
+	MaxBackoffMs     *int
+	// RetryOn specifies error categories to retry (empty list disables category retries).
+	RetryOn []RetryCategory
 }
 
-const defaultInitialBackoffMs = 1000
+// RetryCategory identifies a retryable failure category.
+type RetryCategory string
+
+// Permanent failures are non-retryable and deliberately excluded from constants.
+const (
+	RetryOnInfrastructure RetryCategory = "infrastructure"
+	RetryOnTimeout        RetryCategory = "timeout"
+	RetryOnExecution      RetryCategory = "execution"
+)
+
+// RetryableCategories lists all valid failure categories that can be retried.
+var RetryableCategories = []RetryCategory{
+	RetryOnInfrastructure,
+	RetryOnTimeout,
+	RetryOnExecution,
+}
 
 func (r *RetryConfig) validate() error {
-	return nonNegative(
-		field{"max_attempts", r.MaxAttempts},
-		field{"initial_backoff_ms", r.InitialBackoffMs},
-	)
+	if r.MaxAttempts != nil && *r.MaxAttempts < 1 {
+		return fmt.Errorf("max_attempts=%d would never run the node, 1 means run once and do not retry",
+			*r.MaxAttempts)
+	}
+
+	if err := nonNegativePtr(
+		ptrField{"initial_backoff_ms", r.InitialBackoffMs},
+		ptrField{"max_backoff_ms", r.MaxBackoffMs},
+	); err != nil {
+		return err
+	}
+
+	if r.InitialBackoffMs != nil && r.MaxBackoffMs != nil && *r.MaxBackoffMs < *r.InitialBackoffMs {
+		return fmt.Errorf("max_backoff_ms=%d is below initial_backoff_ms=%d, so the cap would apply from the first retry",
+			*r.MaxBackoffMs, *r.InitialBackoffMs)
+	}
+
+	for _, category := range r.RetryOn {
+		if slices.Contains(RetryableCategories, category) {
+			continue
+		}
+
+		if category == "permanent" {
+			return fmt.Errorf("retry_on names %q, which the platform reports only when a retry cannot help", category)
+		}
+
+		known := make([]string, len(RetryableCategories))
+		for i, c := range RetryableCategories {
+			known[i] = string(c)
+		}
+
+		return fmt.Errorf("retry_on names unknown category %q, known: %s",
+			category, strings.Join(known, ", "))
+	}
+
+	return nil
 }
 
 func (r *RetryConfig) asManifest() *RetryManifest {
-	backoff := r.InitialBackoffMs
-	if backoff == 0 {
-		backoff = defaultInitialBackoffMs
+	out := &RetryManifest{
+		MaxAttempts:      r.MaxAttempts,
+		InitialBackoffMs: r.InitialBackoffMs,
+		MaxBackoffMs:     r.MaxBackoffMs,
 	}
 
-	return &RetryManifest{
-		MaxAttempts:      r.MaxAttempts,
-		InitialBackoffMs: backoff,
+	// The manifest is plain JSON, so the named type does not travel.
+	if r.RetryOn != nil {
+		out.RetryOn = make([]string, len(r.RetryOn))
+		for i, category := range r.RetryOn {
+			out.RetryOn[i] = string(category)
+		}
 	}
+
+	return out
+}
+
+type ptrField struct {
+	name  string
+	value *int
+}
+
+func nonNegativePtr(fields ...ptrField) error {
+	for _, f := range fields {
+		if f.value != nil && *f.value < 0 {
+			return fmt.Errorf("%s cannot be negative, got %d", f.name, *f.value)
+		}
+	}
+
+	return nil
 }
 
 type field struct {

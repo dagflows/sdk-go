@@ -28,9 +28,10 @@ type RuntimeManifest struct {
 }
 
 type WorkflowManifest struct {
-	Name               string `json:"name"`
-	MaxConcurrentNodes int    `json:"max_concurrent_nodes,omitempty"`
-	MaxCycleCount      int    `json:"max_cycle_count,omitempty"`
+	Name               string         `json:"name"`
+	MaxConcurrentNodes int            `json:"max_concurrent_nodes,omitempty"`
+	MaxCycleCount      int            `json:"max_cycle_count,omitempty"`
+	Retry              *RetryManifest `json:"retry,omitempty"`
 }
 
 // NodeManifest describes an individual DAG node definition.
@@ -45,9 +46,12 @@ type NodeManifest struct {
 	Retry           *RetryManifest `json:"retry,omitempty"`
 }
 
+// RetryManifest holds author-configured retry settings where nil indicates unset values.
 type RetryManifest struct {
-	MaxAttempts      int `json:"max_attempts"`
-	InitialBackoffMs int `json:"initial_backoff_ms"`
+	MaxAttempts      *int     `json:"max_attempts,omitempty"`
+	InitialBackoffMs *int     `json:"initial_backoff_ms,omitempty"`
+	MaxBackoffMs     *int     `json:"max_backoff_ms,omitempty"`
+	RetryOn          []string `json:"retry_on,omitempty"`
 }
 
 type entry struct {

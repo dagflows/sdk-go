@@ -209,27 +209,63 @@ func TestRetryReachesTheManifest(t *testing.T) {
 	wf.Node(first, NodeOptions{
 		Key: "flaky",
 		Retry: &RetryConfig{
-			MaxAttempts:      3,
-			InitialBackoffMs: 500,
+			MaxAttempts:      new(3),
+			InitialBackoffMs: new(500),
 		},
 	})
 
 	require.Equal(t, &RetryManifest{
-		MaxAttempts:      3,
-		InitialBackoffMs: 500,
+		MaxAttempts:      new(3),
+		InitialBackoffMs: new(500),
 	}, manifestOf(t, wf).Nodes[0].Retry)
 
-	defaulted := NewWorkflow("demo", WorkflowOptions{})
-	defaulted.Node(first, NodeOptions{
+	// Unset fields remain nil so platform and workflow defaults can be applied.
+	partial := NewWorkflow("demo", WorkflowOptions{})
+	partial.Node(first, NodeOptions{
 		Retry: &RetryConfig{
-			MaxAttempts: 2,
+			MaxAttempts: new(2),
 		},
 	})
 
 	require.Equal(t, &RetryManifest{
-		MaxAttempts:      2,
-		InitialBackoffMs: 1000,
-	}, manifestOf(t, defaulted).Nodes[0].Retry)
+		MaxAttempts: new(2),
+	}, manifestOf(t, partial).Nodes[0].Retry)
+}
+
+// Tests that a workflow default reaches the manifest for the platform to merge.
+func TestWorkflowRetryDefaultReachesTheManifest(t *testing.T) {
+	wf := NewWorkflow("demo", WorkflowOptions{
+		Retry: &RetryConfig{
+			MaxAttempts: new(4),
+			RetryOn:     []RetryCategory{RetryOnInfrastructure, RetryOnTimeout},
+		},
+	})
+	wf.Node(first, NodeOptions{Key: "flaky"})
+
+	manifest := manifestOf(t, wf)
+
+	require.Equal(t, &RetryManifest{
+		MaxAttempts: new(4),
+		RetryOn:     []string{"infrastructure", "timeout"},
+	}, manifest.Workflow.Retry)
+
+	// Unconfigured node retry remains nil so platform-level merging applies defaults.
+	require.Nil(t, manifest.Nodes[0].Retry)
+}
+
+// Tests that a category the platform would never retry is refused at declaration.
+func TestRetryOnRefusesWhatCannotBeRetried(t *testing.T) {
+	wf := NewWorkflow("demo", WorkflowOptions{})
+	wf.Node(first, NodeOptions{Retry: &RetryConfig{RetryOn: []RetryCategory{"permanent"}}})
+
+	_, err := wf.Manifest()
+	require.ErrorContains(t, err, "a retry cannot help")
+
+	unknown := NewWorkflow("demo", WorkflowOptions{})
+	unknown.Node(first, NodeOptions{Retry: &RetryConfig{RetryOn: []RetryCategory{"flaky"}}})
+
+	_, err = unknown.Manifest()
+	require.ErrorContains(t, err, "unknown category")
 }
 
 func TestNegativeSettingsAreRefusedByName(t *testing.T) {
@@ -246,12 +282,14 @@ func TestNegativeSettingsAreRefusedByName(t *testing.T) {
 	retry := NewWorkflow("demo", WorkflowOptions{})
 	retry.Node(first, NodeOptions{
 		Retry: &RetryConfig{
-			MaxAttempts: -2,
+			MaxAttempts: new(-2),
 		},
 	})
 
+	// Anything under one attempt would leave the node never running, which is
+	// a different mistake from a negative backoff and says so.
 	_, err = retry.Manifest()
-	require.ErrorContains(t, err, "max_attempts cannot be negative, got -2")
+	require.ErrorContains(t, err, "would never run the node")
 
 	_, err = NewWorkflow("demo", WorkflowOptions{
 		MaxCycleCount: -1,
@@ -363,8 +401,8 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
 			MemoryLimitMB: 256,
 		},
 		Retry: &RetryConfig{
-			MaxAttempts:      2,
-			InitialBackoffMs: 1000,
+			MaxAttempts:      new(2),
+			InitialBackoffMs: new(1000),
 		},
 	})
 	wf.Node(only, NodeOptions{

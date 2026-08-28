@@ -29,8 +29,8 @@ func referenceWorkflow() *dagflows.Workflow {
 			MemoryLimitMB: 256,
 		},
 		Retry: &dagflows.RetryConfig{
-			MaxAttempts:      2,
-			InitialBackoffMs: 1000,
+			MaxAttempts:      new(2),
+			InitialBackoffMs: new(1000),
 		},
 	})
 	wf.Node(handler, dagflows.NodeOptions{
