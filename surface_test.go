@@ -36,10 +36,12 @@ func handler(_ *dagflows.Ctx, _ *dagflows.Inputs) (any, error) {
 }
 
 func TestTheContractStringsAreExact(t *testing.T) {
-	require.Equal(t, "permanent", dagflows.PERMANENT)
-	require.Equal(t, "infrastructure", dagflows.INFRASTRUCTURE)
-	require.Equal(t, "timeout", dagflows.TIMEOUT)
-	require.Equal(t, "execution", dagflows.EXECUTION)
+	// Converted rather than compared as strings: FailureCategory is a defined
+	// type so a typo is a compile error, and the wire value is what this guards.
+	require.Equal(t, "permanent", string(dagflows.PERMANENT))
+	require.Equal(t, "infrastructure", string(dagflows.INFRASTRUCTURE))
+	require.Equal(t, "timeout", string(dagflows.TIMEOUT))
+	require.Equal(t, "execution", string(dagflows.EXECUTION))
 	require.Equal(t, "application/json", dagflows.JSON)
 	require.Equal(t, "application/x-ndjson", dagflows.NDJSON)
 	require.Equal(t, "text/csv", dagflows.CSV)
