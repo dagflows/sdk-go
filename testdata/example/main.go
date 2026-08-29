@@ -122,14 +122,14 @@ func main() {
 
 	counted := wf.Node(count, dagflows.NodeOptions{
 		Execution: &dagflows.ExecutionConfig{
-			MemoryLimitMB: 256,
+			Machine: "m",
 		},
 	})
 	computed := wf.Node(compute, dagflows.NodeOptions{
 		Depends: []*dagflows.NodeRef{counted},
 		Execution: &dagflows.ExecutionConfig{
-			Timeout:       30,
-			MemoryLimitMB: 256,
+			Machine:     "m",
+			TimeoutSecs: 30,
 		},
 		Retry: &dagflows.RetryConfig{
 			MaxAttempts: new(2),

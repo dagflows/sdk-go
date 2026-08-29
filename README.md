@@ -102,7 +102,7 @@ func main() {
 
 	wf.Node(extractData, dagflows.NodeOptions{
 		Key:       "extract_data",
-		Execution: &dagflows.ExecutionConfig{Timeout: 300, MemoryLimitMB: 512},
+		Execution: &dagflows.ExecutionConfig{Machine: "l", TimeoutSecs: 300},
 		// Only the platform's own failures are retried unless a node says
 		// otherwise. Settings are pointers so leaving one out means "let the
 		// platform decide" rather than zero, and new(5) states one inline.
@@ -116,7 +116,7 @@ func main() {
 }
 ```
 
-`Timeout` is in seconds. Declaring `MaxOutputMB` is what gets a node a multipart upload, letting it emit more than it can hold.
+Use `Machine` to select a resource tier from the platform catalog (e.g. `"xs"`, `"s"`, `"m"`, `"l"`, `"xl"`). Set `TimeoutSecs` to cap node execution duration in seconds, and declare `MaxOutputMB` if your node needs multipart upload capabilities for large outputs.
 
 `MaxAttempts` counts the first run, so `1` means run once and do not retry. Backoff doubles per attempt up to `MaxBackoffMs`.
 

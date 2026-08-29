@@ -177,7 +177,7 @@ func (wf *Workflow) Node(fn runtime.Handler, opts NodeOptions) *NodeRef {
 			node.Config.set(e.key, e.value)
 		}
 
-		node.TimeoutSeconds = opts.Execution.Timeout
+		node.Execution = opts.Execution.asManifest()
 	}
 
 	if opts.Retry != nil {

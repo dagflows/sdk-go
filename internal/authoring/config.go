@@ -7,19 +7,29 @@ import (
 	"strings"
 )
 
-// ExecutionConfig defines runtime resource constraints and timeout limits for a node.
+// ExecutionConfig defines resource and execution configuration options for a node.
 type ExecutionConfig struct {
-	Timeout       int
-	MemoryLimitMB int
-	MilliCores    int
-	MaxOutputMB   int
+	// Machine names a size from the platform catalog (e.g. "s", "m", "l").
+	Machine string
+	// TimeoutSecs bounds a single execution of the node.
+	TimeoutSecs int
+	// MaxOutputMB sets maximum output artifact size in megabytes.
+	MaxOutputMB int
+	// GPU is reserved for future hardware acceleration options.
+	GPU string
 }
 
 func (c *ExecutionConfig) validate() error {
+	if c.GPU != "" {
+		return fmt.Errorf("gpu is reserved, this platform does not offer one yet")
+	}
+
+	if c.Machine != "" && strings.TrimSpace(c.Machine) == "" {
+		return fmt.Errorf("machine cannot be blank, leave it out to take the platform default")
+	}
+
 	return nonNegative(
-		field{"timeout", c.Timeout},
-		field{"memory_limit_mb", c.MemoryLimitMB},
-		field{"milli_cores", c.MilliCores},
+		field{"timeout_secs", c.TimeoutSecs},
 		field{"max_output_mb", c.MaxOutputMB},
 	)
 }
@@ -28,16 +38,26 @@ func (c *ExecutionConfig) validate() error {
 func (c *ExecutionConfig) asConfig() []entry {
 	var out []entry
 
-	if c.MemoryLimitMB != 0 {
-		out = append(out, entry{"memory_limit_mb", c.MemoryLimitMB})
-	}
-
-	if c.MilliCores != 0 {
-		out = append(out, entry{"milli_cores", c.MilliCores})
-	}
-
 	if c.MaxOutputMB != 0 {
 		out = append(out, entry{"max_output_mb", c.MaxOutputMB})
+	}
+
+	return out
+}
+
+// asManifest serializes configured execution options for the build manifest.
+func (c *ExecutionConfig) asManifest() *ExecutionManifest {
+	if c.Machine == "" && c.TimeoutSecs == 0 {
+		return nil
+	}
+
+	out := &ExecutionManifest{}
+	if c.Machine != "" {
+		out.Machine = c.Machine
+	}
+
+	if c.TimeoutSecs != 0 {
+		out.TimeoutSecs = &c.TimeoutSecs
 	}
 
 	return out

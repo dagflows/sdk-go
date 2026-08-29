@@ -152,23 +152,41 @@ func TestAnExternalNodeKeyIsStillChecked(t *testing.T) {
 	require.ErrorContains(t, err, "invalid")
 }
 
-func TestExecutionSettingsSplitBetweenTimeoutAndConfig(t *testing.T) {
+func TestExecutionSettingsSplitBetweenTheBlockAndConfig(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
 	wf.Node(first, NodeOptions{
 		Key: "heavy",
 		Execution: &ExecutionConfig{
-			Timeout:       30,
-			MemoryLimitMB: 256,
-			MilliCores:    500,
+			Machine:     "l",
+			TimeoutSecs: 30,
+			MaxOutputMB: 64,
 		},
 	})
 
+	// Verifies execution options emit to the execution block and payload limits stay in config.
 	node := manifestOf(t, wf).Nodes[0]
-	require.Equal(t, 30, node.TimeoutSeconds)
+	require.NotNil(t, node.Execution)
+	require.Equal(t, "l", node.Execution.Machine)
+	require.Equal(t, 30, *node.Execution.TimeoutSecs)
 
 	raw, err := json.Marshal(node.Config)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"memory_limit_mb": 256, "milli_cores": 500}`, string(raw))
+	require.JSONEq(t, `{"max_output_mb": 64}`, string(raw))
+}
+
+func TestANodeAskingForNothingStatesNoExecutionBlock(t *testing.T) {
+	wf := NewWorkflow("demo", WorkflowOptions{})
+	wf.Node(first, NodeOptions{Key: "plain"})
+
+	require.Nil(t, manifestOf(t, wf).Nodes[0].Execution)
+}
+
+func TestAReservedGPUIsRefusedWhereItIsWritten(t *testing.T) {
+	wf := NewWorkflow("demo", WorkflowOptions{})
+	wf.Node(first, NodeOptions{Key: "g", Execution: &ExecutionConfig{GPU: "a100"}})
+
+	_, err := wf.Manifest()
+	require.ErrorContains(t, err, "gpu")
 }
 
 func TestTheDeclaredCeilingReachesTheManifest(t *testing.T) {
@@ -193,15 +211,13 @@ func TestConfigKeepsTheAuthorsKeysSortedThenExecutionInManifestOrder(t *testing.
 			"milli_cores": 1,
 		},
 		Execution: &ExecutionConfig{
-			MemoryLimitMB: 256,
-			MilliCores:    500,
-			MaxOutputMB:   2,
+			MaxOutputMB: 2,
 		},
 	})
 
 	raw, err := json.Marshal(manifestOf(t, wf).Nodes[0].Config)
 	require.NoError(t, err)
-	require.Equal(t, `{"alpha":"x","milli_cores":500,"zeta":1,"memory_limit_mb":256,"max_output_mb":2}`, string(raw))
+	require.Equal(t, `{"alpha":"x","milli_cores":1,"zeta":1,"max_output_mb":2}`, string(raw))
 }
 
 func TestRetryReachesTheManifest(t *testing.T) {
@@ -272,12 +288,12 @@ func TestNegativeSettingsAreRefusedByName(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
 	wf.Node(first, NodeOptions{
 		Execution: &ExecutionConfig{
-			MemoryLimitMB: -1,
+			TimeoutSecs: -1,
 		},
 	})
 
 	_, err := wf.Manifest()
-	require.EqualError(t, err, "node 'first': memory_limit_mb cannot be negative, got -1")
+	require.EqualError(t, err, "node 'first': timeout_secs cannot be negative, got -1")
 
 	retry := NewWorkflow("demo", WorkflowOptions{})
 	retry.Node(first, NodeOptions{
@@ -390,15 +406,15 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
 	step1 := wf.Node(first, NodeOptions{
 		Key: "step_1",
 		Execution: &ExecutionConfig{
-			MemoryLimitMB: 256,
+			Machine: "m",
 		},
 	})
 	step2 := wf.Node(second, NodeOptions{
 		Key:     "step_2",
 		Depends: []*NodeRef{step1},
 		Execution: &ExecutionConfig{
-			Timeout:       30,
-			MemoryLimitMB: 256,
+			Machine:     "m",
+			TimeoutSecs: 30,
 		},
 		Retry: &RetryConfig{
 			MaxAttempts:      new(2),
@@ -430,8 +446,8 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
     {
       "key": "step_1",
       "entrypoint": "app",
-      "config": {
-        "memory_limit_mb": 256
+      "execution": {
+        "machine": "m"
       }
     },
     {
@@ -440,13 +456,13 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
       "depends": [
         "step_1"
       ],
-      "timeout_seconds": 30,
-      "config": {
-        "memory_limit_mb": 256
-      },
       "retry": {
         "max_attempts": 2,
         "initial_backoff_ms": 1000
+      },
+      "execution": {
+        "machine": "m",
+        "timeout_secs": 30
       }
     },
     {

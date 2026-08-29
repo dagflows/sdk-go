@@ -28,22 +28,29 @@ type RuntimeManifest struct {
 }
 
 type WorkflowManifest struct {
-	Name               string         `json:"name"`
-	MaxConcurrentNodes int            `json:"max_concurrent_nodes,omitempty"`
-	MaxCycleCount      int            `json:"max_cycle_count,omitempty"`
-	Retry              *RetryManifest `json:"retry,omitempty"`
+	Name               string             `json:"name"`
+	MaxConcurrentNodes int                `json:"max_concurrent_nodes,omitempty"`
+	MaxCycleCount      int                `json:"max_cycle_count,omitempty"`
+	Retry              *RetryManifest     `json:"retry,omitempty"`
+	Execution          *ExecutionManifest `json:"execution,omitempty"`
 }
 
 // NodeManifest describes an individual DAG node definition.
 type NodeManifest struct {
-	Key             string         `json:"key"`
-	Entrypoint      string         `json:"entrypoint"`
-	Type            string         `json:"type,omitempty"`
-	Depends         []string       `json:"depends,omitempty"`
-	ExternalDepends []string       `json:"external_depends,omitempty"`
-	TimeoutSeconds  int            `json:"timeout_seconds,omitempty"`
-	Config          config         `json:"config,omitzero"`
-	Retry           *RetryManifest `json:"retry,omitempty"`
+	Key             string             `json:"key"`
+	Entrypoint      string             `json:"entrypoint"`
+	Type            string             `json:"type,omitempty"`
+	Depends         []string           `json:"depends,omitempty"`
+	ExternalDepends []string           `json:"external_depends,omitempty"`
+	Config          config             `json:"config,omitzero"`
+	Retry           *RetryManifest     `json:"retry,omitempty"`
+	Execution       *ExecutionManifest `json:"execution,omitempty"`
+}
+
+// ExecutionManifest defines node execution settings for the manifest.
+type ExecutionManifest struct {
+	Machine     string `json:"machine,omitempty"`
+	TimeoutSecs *int   `json:"timeout_secs,omitempty"`
 }
 
 // RetryManifest holds author-configured retry settings where nil indicates unset values.

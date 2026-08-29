@@ -12,8 +12,8 @@
     {
       "key": "step_1",
       "entrypoint": "app",
-      "config": {
-        "memory_limit_mb": 256
+      "execution": {
+        "machine": "m"
       }
     },
     {
@@ -22,13 +22,13 @@
       "depends": [
         "step_1"
       ],
-      "timeout_seconds": 30,
-      "config": {
-        "memory_limit_mb": 256
-      },
       "retry": {
         "max_attempts": 2,
         "initial_backoff_ms": 1000
+      },
+      "execution": {
+        "machine": "m",
+        "timeout_secs": 30
       }
     },
     {

@@ -18,15 +18,15 @@ func referenceWorkflow() *dagflows.Workflow {
 	step1 := wf.Node(handler, dagflows.NodeOptions{
 		Key: "step_1",
 		Execution: &dagflows.ExecutionConfig{
-			MemoryLimitMB: 256,
+			Machine: "m",
 		},
 	})
 	step2 := wf.Node(handler, dagflows.NodeOptions{
 		Key:     "step_2",
 		Depends: []*dagflows.NodeRef{step1},
 		Execution: &dagflows.ExecutionConfig{
-			Timeout:       30,
-			MemoryLimitMB: 256,
+			Machine:     "m",
+			TimeoutSecs: 30,
 		},
 		Retry: &dagflows.RetryConfig{
 			MaxAttempts:      new(2),

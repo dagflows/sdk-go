@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/dagflows/sdk-go"
+	dagflows "github.com/dagflows/sdk-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,10 +93,9 @@ func TestTheWorkflowDeclaresAndEmitsInProcess(t *testing.T) {
 			wf.ExternalNode("crunch"),
 		},
 		Execution: &dagflows.ExecutionConfig{
-			Timeout:       30,
-			MemoryLimitMB: 256,
-			MilliCores:    500,
-			MaxOutputMB:   1,
+			Machine:     "m",
+			TimeoutSecs: 30,
+			MaxOutputMB: 1,
 		},
 		Retry: &dagflows.RetryConfig{
 			MaxAttempts:      new(3),

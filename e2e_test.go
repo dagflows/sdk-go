@@ -301,7 +301,7 @@ func TestTheNodeKeyInAFixtureIsTheOneNamed(t *testing.T) {
 	ctx := readJSON(t, filepath.Join(dir, "m.json"))["ctx"].(map[string]any)
 	require.Equal(t, "compute", ctx["node_key"])
 	require.Equal(t, "go", ctx["language"])
-	require.Equal(t, float64(512), ctx["memory_limit_mb"])
+	require.Equal(t, float64(512), ctx["memory_mb"])
 }
 
 func TestTheManifestCommandWritesWhatTheBuilderReads(t *testing.T) {
@@ -447,7 +447,7 @@ func TestCheckNamesANodeWhoseSettingsChanged(t *testing.T) {
 
 	staleManifest(t, dir, func(manifest map[string]any) {
 		node := manifest["nodes"].([]any)[0].(map[string]any)
-		node["config"].(map[string]any)["memory_limit_mb"] = 9999
+		node["execution"].(map[string]any)["machine"] = "xl"
 	})
 
 	result := cli(t, dir, "build", "manifest", "--check")
