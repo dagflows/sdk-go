@@ -184,7 +184,7 @@ func TestTheLocalEnvelopeCarriesWhatTheNodeBelieves(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"ctx": {"workflow_run_id": "local", "node_key": "extract", "language": "go", "entrypoint": "app",
-		        "config": {}, "timeout_seconds": 0, "attempt": 0, "memory_mb": 256, "inline_max_bytes": 64},
+		        "config": {}, "timeout_ms": 0, "attempt": 0, "memory_mb": 256, "inline_max_bytes": 64},
 		"payload": {"inputs": {}}
 	}`, string(encoded))
 }

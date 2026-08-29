@@ -49,8 +49,8 @@ type NodeManifest struct {
 
 // ExecutionManifest defines node execution settings for the manifest.
 type ExecutionManifest struct {
-	Machine     string `json:"machine,omitempty"`
-	TimeoutSecs *int   `json:"timeout_secs,omitempty"`
+	Machine   string `json:"machine,omitempty"`
+	TimeoutMs *int64 `json:"timeout_ms,omitempty"`
 }
 
 // RetryManifest holds author-configured retry settings where nil indicates unset values.

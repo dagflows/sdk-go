@@ -49,7 +49,7 @@ func TestLoadReadsCtxAndInputs(t *testing.T) {
 			"language":         "go",
 			"runtime_version":  "1.26",
 			"abi":              "deb13",
-			"timeout_seconds":  600,
+			"timeout_ms":       600000,
 			"memory_mb":        512,
 			"inline_max_bytes": 1024,
 		},
@@ -91,7 +91,7 @@ func TestNumericFieldsCoerceIntsAndFloatsAndDefaultOtherwise(t *testing.T) {
 		"attempt":          json.Number("2"),
 		"memory_mb":        json.Number("512.0"),
 		"milli_cores":      "lots",
-		"timeout_seconds":  nil,
+		"timeout_ms":       nil,
 		"inline_max_bytes": true,
 		"config":           "not a map",
 	})
@@ -99,7 +99,7 @@ func TestNumericFieldsCoerceIntsAndFloatsAndDefaultOtherwise(t *testing.T) {
 	require.Equal(t, 2, ctx.Attempt)
 	require.Equal(t, 512, ctx.MemoryMB)
 	require.Zero(t, ctx.MilliCores)
-	require.Zero(t, ctx.TimeoutSeconds)
+	require.Zero(t, ctx.TimeoutMs)
 	require.Equal(t, DefaultInlineMaxBytes, ctx.InlineMaxBytes)
 	require.Empty(t, ctx.Config)
 }

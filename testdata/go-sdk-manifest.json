@@ -28,7 +28,7 @@
       },
       "execution": {
         "machine": "m",
-        "timeout_secs": 30
+        "timeout_ms": 30000
       }
     },
     {

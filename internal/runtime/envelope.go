@@ -22,7 +22,7 @@ type Ctx struct {
 	ABI             string
 	Entrypoint      string
 	Config          map[string]any
-	TimeoutSeconds  int
+	TimeoutMs       int64
 	Attempt         int
 	MemoryMB        int
 	MilliCores      int
@@ -51,7 +51,7 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 		ABI:             Str(raw["abi"]),
 		Entrypoint:      Str(raw["entrypoint"]),
 		Config:          config,
-		TimeoutSeconds:  int(Num(raw["timeout_seconds"], 0)),
+		TimeoutMs:       int64(Num(raw["timeout_ms"], 0)),
 		Attempt:         int(Num(raw["attempt"], 0)),
 		MemoryMB:        int(Num(raw["memory_mb"], 0)),
 		MilliCores:      int(Num(raw["milli_cores"], 0)),

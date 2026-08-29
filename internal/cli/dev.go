@@ -480,7 +480,7 @@ func (o *devOptions) envelope() ordered {
 			{"language", authoring.Language},
 			{"entrypoint", authoring.Entrypoint},
 			{"config", map[string]any{}},
-			{"timeout_seconds", 0},
+			{"timeout_ms", 0},
 			{"attempt", 0},
 			{"memory_mb", o.memoryLimitMB},
 			{"inline_max_bytes", o.inlineMaxBytes},

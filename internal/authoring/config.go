@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const millisPerSecond = 1_000
+
 // ExecutionConfig defines resource and execution configuration options for a node.
 type ExecutionConfig struct {
 	// Machine names a size from the platform catalog (e.g. "s", "m", "l").
@@ -57,7 +59,8 @@ func (c *ExecutionConfig) asManifest() *ExecutionManifest {
 	}
 
 	if c.TimeoutSecs != 0 {
-		out.TimeoutSecs = &c.TimeoutSecs
+		ms := int64(c.TimeoutSecs) * millisPerSecond
+		out.TimeoutMs = &ms
 	}
 
 	return out

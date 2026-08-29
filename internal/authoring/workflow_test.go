@@ -167,7 +167,7 @@ func TestExecutionSettingsSplitBetweenTheBlockAndConfig(t *testing.T) {
 	node := manifestOf(t, wf).Nodes[0]
 	require.NotNil(t, node.Execution)
 	require.Equal(t, "l", node.Execution.Machine)
-	require.Equal(t, 30, *node.Execution.TimeoutSecs)
+	require.Equal(t, int64(30_000), *node.Execution.TimeoutMs)
 
 	raw, err := json.Marshal(node.Config)
 	require.NoError(t, err)
@@ -462,7 +462,7 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
       },
       "execution": {
         "machine": "m",
-        "timeout_secs": 30
+        "timeout_ms": 30000
       }
     },
     {
