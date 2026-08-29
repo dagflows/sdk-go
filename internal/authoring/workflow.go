@@ -33,6 +33,7 @@ type NodeOptions struct {
 	Key       string
 	Depends   []*NodeRef
 	Execution *ExecutionConfig
+	Transfer  *TransferConfig
 	Retry     *RetryConfig
 	Config    map[string]any
 	Type      string
@@ -173,11 +174,15 @@ func (wf *Workflow) Node(fn runtime.Handler, opts NodeOptions) *NodeRef {
 			wf.fail(fmt.Errorf("node '%s': %w", key, err))
 		}
 
-		for _, e := range opts.Execution.asConfig() {
-			node.Config.set(e.key, e.value)
+		node.Execution = opts.Execution.asManifest()
+	}
+
+	if opts.Transfer != nil {
+		if err := opts.Transfer.validate(); err != nil {
+			wf.fail(fmt.Errorf("node '%s': %w", key, err))
 		}
 
-		node.Execution = opts.Execution.asManifest()
+		node.Transfer = opts.Transfer.asManifest()
 	}
 
 	if opts.Retry != nil {

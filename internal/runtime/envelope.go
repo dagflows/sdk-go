@@ -29,7 +29,13 @@ type Ctx struct {
 	InlineMaxBytes  int
 	OutputUploadURL string
 	OutputKey       string
-	Raw             map[string]any
+	// MaxOutputMB is how much this node may emit, 0 when it declared nothing.
+	MaxOutputMB int64
+	// ConnectTimeoutMs and IdleTimeoutMs bound one network operation each,
+	// never the whole transfer.
+	ConnectTimeoutMs int64
+	IdleTimeoutMs    int64
+	Raw              map[string]any
 }
 
 // CtxFromRaw parses the raw context map, applying fallback defaults for missing fields.
@@ -42,6 +48,8 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 	if config == nil {
 		config = map[string]any{}
 	}
+
+	transfer, _ := raw["transfer"].(map[string]any)
 
 	return &Ctx{
 		WorkflowRunID:   Str(raw["workflow_run_id"]),
@@ -58,7 +66,12 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 		InlineMaxBytes:  int(Num(raw["inline_max_bytes"], DefaultInlineMaxBytes)),
 		OutputUploadURL: Str(raw["output_upload_url"]),
 		OutputKey:       Str(raw["output_key"]),
-		Raw:             raw,
+		// A host that sent no transfer block is a local run; the defaults here
+		// stand in for what the platform always states.
+		MaxOutputMB:      int64(Num(transfer["max_output_mb"], 0)),
+		ConnectTimeoutMs: int64(Num(transfer["connect_timeout_ms"], DefaultConnectTimeoutMs)),
+		IdleTimeoutMs:    int64(Num(transfer["idle_timeout_ms"], DefaultIdleTimeoutMs)),
+		Raw:              raw,
 	}
 }
 
@@ -460,6 +473,8 @@ func Load(path string) (*Ctx, *Inputs, error) {
 
 	rawCtx, _ := envelope["ctx"].(map[string]any)
 	ctx := CtxFromRaw(rawCtx)
+	// The transport adopts the host's limits before the node moves any bytes.
+	configureTransfer(ctx.ConnectTimeoutMs, ctx.IdleTimeoutMs)
 
 	payload, _ := envelope["payload"].(map[string]any)
 	entries, _ := payload["inputs"].(map[string]any)

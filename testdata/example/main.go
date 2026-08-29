@@ -139,7 +139,7 @@ func main() {
 	wf.Node(export, dagflows.NodeOptions{
 		Key:     "report",
 		Depends: []*dagflows.NodeRef{computed, wf.ExternalNode("crunch")},
-		Execution: &dagflows.ExecutionConfig{
+		Transfer: &dagflows.TransferConfig{
 			MaxOutputMB: 64,
 		},
 	})

@@ -159,19 +159,26 @@ func TestExecutionSettingsSplitBetweenTheBlockAndConfig(t *testing.T) {
 		Execution: &ExecutionConfig{
 			Machine:     "l",
 			TimeoutSecs: 30,
-			MaxOutputMB: 64,
+		},
+		Transfer: &TransferConfig{
+			MaxOutputMB:        64,
+			ConnectTimeoutSecs: 5,
 		},
 	})
 
-	// Verifies execution options emit to the execution block and payload limits stay in config.
 	node := manifestOf(t, wf).Nodes[0]
 	require.NotNil(t, node.Execution)
 	require.Equal(t, "l", node.Execution.Machine)
 	require.Equal(t, int64(30_000), *node.Execution.TimeoutMs)
 
+	require.NotNil(t, node.Transfer)
+	require.Equal(t, int64(64), *node.Transfer.MaxOutputMB)
+	require.Equal(t, int64(5_000), *node.Transfer.ConnectTimeoutMs)
+	require.Nil(t, node.Transfer.IdleTimeoutMs)
+
 	raw, err := json.Marshal(node.Config)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"max_output_mb": 64}`, string(raw))
+	require.JSONEq(t, `{}`, string(raw))
 }
 
 func TestANodeAskingForNothingStatesNoExecutionBlock(t *testing.T) {
@@ -192,17 +199,17 @@ func TestAReservedGPUIsRefusedWhereItIsWritten(t *testing.T) {
 func TestTheDeclaredCeilingReachesTheManifest(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
 	wf.Node(first, NodeOptions{
-		Execution: &ExecutionConfig{
+		Transfer: &TransferConfig{
 			MaxOutputMB: 500,
 		},
 	})
 
-	raw, err := json.Marshal(manifestOf(t, wf).Nodes[0].Config)
-	require.NoError(t, err)
-	require.Equal(t, `{"max_output_mb":500}`, string(raw))
+	node := manifestOf(t, wf).Nodes[0]
+	require.NotNil(t, node.Transfer)
+	require.Equal(t, int64(500), *node.Transfer.MaxOutputMB)
 }
 
-func TestConfigKeepsTheAuthorsKeysSortedThenExecutionInManifestOrder(t *testing.T) {
+func TestConfigKeepsTheAuthorsKeysSorted(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
 	wf.Node(first, NodeOptions{
 		Config: map[string]any{
@@ -210,14 +217,12 @@ func TestConfigKeepsTheAuthorsKeysSortedThenExecutionInManifestOrder(t *testing.
 			"alpha":       "x",
 			"milli_cores": 1,
 		},
-		Execution: &ExecutionConfig{
-			MaxOutputMB: 2,
-		},
 	})
 
+	// The author's own keys are all that reaches config now, sorted.
 	raw, err := json.Marshal(manifestOf(t, wf).Nodes[0].Config)
 	require.NoError(t, err)
-	require.Equal(t, `{"alpha":"x","milli_cores":1,"zeta":1,"max_output_mb":2}`, string(raw))
+	require.Equal(t, `{"alpha":"x","milli_cores":1,"zeta":1}`, string(raw))
 }
 
 func TestRetryReachesTheManifest(t *testing.T) {

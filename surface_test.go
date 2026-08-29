@@ -95,6 +95,8 @@ func TestTheWorkflowDeclaresAndEmitsInProcess(t *testing.T) {
 		Execution: &dagflows.ExecutionConfig{
 			Machine:     "m",
 			TimeoutSecs: 30,
+		},
+		Transfer: &dagflows.TransferConfig{
 			MaxOutputMB: 1,
 		},
 		Retry: &dagflows.RetryConfig{

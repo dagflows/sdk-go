@@ -102,6 +102,9 @@ type NodeRef = authoring.NodeRef
 // ExecutionConfig defines resource requirements and timeout limits for a node.
 type ExecutionConfig = authoring.ExecutionConfig
 
+// TransferConfig defines how a node moves data in and out of storage.
+type TransferConfig = authoring.TransferConfig
+
 // RetryConfig defines how a failed node is retried.
 type RetryConfig = authoring.RetryConfig
 

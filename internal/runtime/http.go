@@ -6,14 +6,37 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
 
+// Fallbacks for a host that sent no transfer block. The platform always does,
+// so these only cover a local run against a hand written envelope.
+const (
+	DefaultConnectTimeoutMs = 10_000
+	DefaultIdleTimeoutMs    = 60_000
+)
+
 // httpTimeout limits idle wait duration per network operation rather than the entire transfer.
-var httpTimeout = 60 * time.Second
+var httpTimeout = time.Duration(DefaultIdleTimeoutMs) * time.Millisecond
+
+// configureTransfer adopts the host's transfer timeouts. Called once, before
+// the node runs.
+func configureTransfer(connectMs, idleMs int64) {
+	if idleMs > 0 {
+		httpTimeout = time.Duration(idleMs) * time.Millisecond
+	}
+
+	if connectMs > 0 {
+		dialer := &net.Dialer{Timeout: time.Duration(connectMs) * time.Millisecond, KeepAlive: 30 * time.Second}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.DialContext = dialer.DialContext
+		httpClient.Transport = transport
+	}
+}
 
 var httpClient = &http.Client{
 	Transport: http.DefaultTransport,

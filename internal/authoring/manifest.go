@@ -45,6 +45,14 @@ type NodeManifest struct {
 	Config          config             `json:"config,omitzero"`
 	Retry           *RetryManifest     `json:"retry,omitempty"`
 	Execution       *ExecutionManifest `json:"execution,omitempty"`
+	Transfer        *TransferManifest  `json:"transfer,omitempty"`
+}
+
+// TransferManifest defines node transfer settings for the manifest.
+type TransferManifest struct {
+	MaxOutputMB      *int64 `json:"max_output_mb,omitempty"`
+	ConnectTimeoutMs *int64 `json:"connect_timeout_ms,omitempty"`
+	IdleTimeoutMs    *int64 `json:"idle_timeout_ms,omitempty"`
 }
 
 // ExecutionManifest defines node execution settings for the manifest.

@@ -15,8 +15,6 @@ type ExecutionConfig struct {
 	Machine string
 	// TimeoutSecs bounds a single execution of the node.
 	TimeoutSecs int
-	// MaxOutputMB sets maximum output artifact size in megabytes.
-	MaxOutputMB int
 	// GPU is reserved for future hardware acceleration options.
 	GPU string
 }
@@ -32,16 +30,49 @@ func (c *ExecutionConfig) validate() error {
 
 	return nonNegative(
 		field{"timeout_secs", c.TimeoutSecs},
-		field{"max_output_mb", c.MaxOutputMB},
 	)
 }
 
-// asConfig transforms execution settings into node config map entries.
-func (c *ExecutionConfig) asConfig() []entry {
-	var out []entry
+// TransferConfig configures how a node moves data in and out of storage.
+type TransferConfig struct {
+	// MaxOutputMB is how much this node expects to emit. Leaving it out asks
+	// for no multipart upload, which is not the same as asking for zero.
+	MaxOutputMB int
+	// ConnectTimeoutSecs bounds establishing a connection.
+	ConnectTimeoutSecs int
+	// IdleTimeoutSecs bounds the gap between chunks. This never bounds the
+	// whole transfer: a large upload that keeps moving is not stalled.
+	IdleTimeoutSecs int
+}
 
+func (c *TransferConfig) validate() error {
+	return nonNegative(
+		field{"max_output_mb", c.MaxOutputMB},
+		field{"connect_timeout_secs", c.ConnectTimeoutSecs},
+		field{"idle_timeout_secs", c.IdleTimeoutSecs},
+	)
+}
+
+// asManifest serializes configured transfer options for the build manifest.
+func (c *TransferConfig) asManifest() *TransferManifest {
+	if c.MaxOutputMB == 0 && c.ConnectTimeoutSecs == 0 && c.IdleTimeoutSecs == 0 {
+		return nil
+	}
+
+	out := &TransferManifest{}
 	if c.MaxOutputMB != 0 {
-		out = append(out, entry{"max_output_mb", c.MaxOutputMB})
+		mb := int64(c.MaxOutputMB)
+		out.MaxOutputMB = &mb
+	}
+
+	if c.ConnectTimeoutSecs != 0 {
+		ms := int64(c.ConnectTimeoutSecs) * millisPerSecond
+		out.ConnectTimeoutMs = &ms
+	}
+
+	if c.IdleTimeoutSecs != 0 {
+		ms := int64(c.IdleTimeoutSecs) * millisPerSecond
+		out.IdleTimeoutMs = &ms
 	}
 
 	return out
