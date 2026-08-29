@@ -6,36 +6,36 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dagflows/sdk-go"
+	"github.com/dagflows/sdk-go/authoring"
 	"github.com/stretchr/testify/require"
 )
 
-func referenceWorkflow() *dagflows.Workflow {
-	wf := dagflows.NewWorkflow("branching-demo", dagflows.WorkflowOptions{
+func referenceWorkflow() *authoring.Workflow {
+	wf := authoring.NewWorkflow("branching-demo", authoring.WorkflowOptions{
 		Version:            "1.26",
 		MaxConcurrentNodes: 5,
 	})
-	step1 := wf.Node(handler, dagflows.NodeOptions{
+	step1 := wf.Node(handler, authoring.NodeOptions{
 		Key: "step_1",
-		Execution: &dagflows.ExecutionConfig{
+		Execution: &authoring.Execution{
 			Machine: "m",
 		},
 	})
-	step2 := wf.Node(handler, dagflows.NodeOptions{
+	step2 := wf.Node(handler, authoring.NodeOptions{
 		Key:     "step_2",
-		Depends: []*dagflows.NodeRef{step1},
-		Execution: &dagflows.ExecutionConfig{
+		Depends: []*authoring.NodeRef{step1},
+		Execution: &authoring.Execution{
 			Machine:     "m",
 			TimeoutSecs: 30,
 		},
-		Retry: &dagflows.RetryConfig{
+		Retry: &authoring.Retry{
 			MaxAttempts:      new(2),
 			InitialBackoffMs: new(1000),
 		},
 	})
-	wf.Node(handler, dagflows.NodeOptions{
+	wf.Node(handler, authoring.NodeOptions{
 		Key: "report",
-		Depends: []*dagflows.NodeRef{
+		Depends: []*authoring.NodeRef{
 			step2,
 			wf.ExternalNode("crunch"),
 		},

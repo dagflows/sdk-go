@@ -4,10 +4,12 @@ package main
 import (
 	"os"
 
-	"github.com/dagflows/sdk-go"
+	dagflows "github.com/dagflows/sdk-go"
+	"github.com/dagflows/sdk-go/authoring"
+	"github.com/dagflows/sdk-go/runtime"
 )
 
-func step(*dagflows.Ctx, *dagflows.Inputs) (any, error) {
+func step(*runtime.Ctx, *runtime.Inputs) (any, error) {
 	return map[string]any{}, nil
 }
 
@@ -16,24 +18,24 @@ func main() {
 	case "none":
 
 	case "two":
-		dagflows.NewWorkflow("a", dagflows.WorkflowOptions{})
-		dagflows.NewWorkflow("b", dagflows.WorkflowOptions{})
+		authoring.NewWorkflow("a", authoring.WorkflowOptions{})
+		authoring.NewWorkflow("b", authoring.WorkflowOptions{})
 
 	case "badkey":
-		dagflows.NewWorkflow("w", dagflows.WorkflowOptions{}).Node(step, dagflows.NodeOptions{
+		authoring.NewWorkflow("w", authoring.WorkflowOptions{}).Node(step, authoring.NodeOptions{
 			Key: "9lives",
 		})
 
 	case "anonymous":
-		dagflows.NewWorkflow("w", dagflows.WorkflowOptions{}).Node(
-			func(*dagflows.Ctx, *dagflows.Inputs) (any, error) {
+		authoring.NewWorkflow("w", authoring.WorkflowOptions{}).Node(
+			func(*runtime.Ctx, *runtime.Inputs) (any, error) {
 				return nil, nil
 			},
-			dagflows.NodeOptions{},
+			authoring.NodeOptions{},
 		)
 
 	case "empty":
-		dagflows.NewWorkflow("w", dagflows.WorkflowOptions{})
+		authoring.NewWorkflow("w", authoring.WorkflowOptions{})
 	}
 
 	dagflows.Main()

@@ -24,17 +24,19 @@ package main
 import (
 	"encoding/json"
 
-	"github.com/dagflows/sdk-go"
+	dagflows "github.com/dagflows/sdk-go"
+	"github.com/dagflows/sdk-go/authoring"
+	"github.com/dagflows/sdk-go/runtime"
 )
 
-func fetchOrders(_ *dagflows.Ctx, _ *dagflows.Inputs) (any, error) {
+func fetchOrders(_ *runtime.Ctx, _ *runtime.Inputs) (any, error) {
 	return map[string]any{"orders": []any{
 		map[string]any{"id": 1, "amount": 100},
 		map[string]any{"id": 2, "amount": 250},
 	}}, nil
 }
 
-func calculateTotals(_ *dagflows.Ctx, inputs *dagflows.Inputs) (any, error) {
+func calculateTotals(_ *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
 	parent, err := inputs.Get("fetch_orders")
 	if err != nil {
 		return nil, err
@@ -56,10 +58,10 @@ func calculateTotals(_ *dagflows.Ctx, inputs *dagflows.Inputs) (any, error) {
 }
 
 func main() {
-	wf := dagflows.NewWorkflow("order_pipeline", dagflows.WorkflowOptions{MaxConcurrentNodes: 4})
+	wf := authoring.NewWorkflow("order_pipeline", authoring.WorkflowOptions{MaxConcurrentNodes: 4})
 
-	fetched := wf.Node(fetchOrders, dagflows.NodeOptions{Key: "fetch_orders"})
-	wf.Node(calculateTotals, dagflows.NodeOptions{Key: "calculate_totals", Depends: []*dagflows.NodeRef{fetched}})
+	fetched := wf.Node(fetchOrders, authoring.NodeOptions{Key: "fetch_orders"})
+	wf.Node(calculateTotals, authoring.NodeOptions{Key: "calculate_totals", Depends: []*authoring.NodeRef{fetched}})
 
 	dagflows.Main()
 }
@@ -72,7 +74,7 @@ func main() {
 Every handler has one signature, and the compiler is the binding validator:
 
 ```go
-func step(ctx *dagflows.Ctx, inputs *dagflows.Inputs) (any, error)
+func step(ctx *runtime.Ctx, inputs *runtime.Inputs) (any, error)
 ```
 
 Name what you do not use `_`. Numbers in decoded inputs are `json.Number`, so an integer beyond float64 precision survives a trip through a node.
@@ -87,28 +89,32 @@ The node key defaults to the function's name; set `Key` to choose another. Inval
 // file: limits/main.go
 package main
 
-import "github.com/dagflows/sdk-go"
+import (
+	dagflows "github.com/dagflows/sdk-go"
+	"github.com/dagflows/sdk-go/authoring"
+	"github.com/dagflows/sdk-go/runtime"
+)
 
-func extractData(_ *dagflows.Ctx, _ *dagflows.Inputs) (any, error) {
+func extractData(_ *runtime.Ctx, _ *runtime.Inputs) (any, error) {
 	return map[string]any{"rows": 0}, nil
 }
 
 func main() {
-	wf := dagflows.NewWorkflow("data_pipeline", dagflows.WorkflowOptions{
+	wf := authoring.NewWorkflow("data_pipeline", authoring.WorkflowOptions{
 		// Every node inherits this; a node stating its own overrides it field
 		// by field, so the settings it leaves out still apply.
-		Retry: &dagflows.RetryConfig{MaxAttempts: new(3), InitialBackoffMs: new(1000)},
+		Retry: &authoring.Retry{MaxAttempts: new(3), InitialBackoffMs: new(1000)},
 	})
 
-	wf.Node(extractData, dagflows.NodeOptions{
+	wf.Node(extractData, authoring.NodeOptions{
 		Key:       "extract_data",
-		Execution: &dagflows.ExecutionConfig{Machine: "l", TimeoutSecs: 300},
+		Execution: &authoring.Execution{Machine: "l", TimeoutSecs: 300},
 		// Only the platform's own failures are retried unless a node says
 		// otherwise. Settings are pointers so leaving one out means "let the
 		// platform decide" rather than zero, and new(5) states one inline.
-		Retry: &dagflows.RetryConfig{
+		Retry: &authoring.Retry{
 			MaxAttempts: new(5),
-			RetryOn:     []dagflows.RetryCategory{dagflows.RetryOnInfrastructure, dagflows.RetryOnTimeout},
+			RetryOn:     []authoring.RetryCategory{authoring.RetryOnInfrastructure, authoring.RetryOnTimeout},
 		},
 	})
 
@@ -137,9 +143,9 @@ There is no constant for `permanent` on purpose: the platform reports it when ru
 `Depends` takes the handles `Node` returned, never strings, so a typo fails to compile. A node in another project is the one thing you name by key:
 
 ```go
-wf.Node(fulfillOrder, dagflows.NodeOptions{
+wf.Node(fulfillOrder, authoring.NodeOptions{
 	Key:     "fulfill_order",
-	Depends: []*dagflows.NodeRef{fetched, wf.ExternalNode("inventory_check")},
+	Depends: []*authoring.NodeRef{fetched, wf.ExternalNode("inventory_check")},
 })
 ```
 
@@ -184,20 +190,20 @@ single, err := inputs.One()
 
 ## Producing outputs
 
-Return a value directly, or a `dagflows.Result` for routing and formatting:
+Return a value directly, or a `runtime.Result` for routing and formatting:
 
 ```go
 // A plain value
 return map[string]any{"count": 42}, nil
 
 // Route downstream execution to a specific branch
-return dagflows.Result{Output: map[string]any{"status": "approved"}, Next: []string{"process_payment"}}, nil
+return runtime.Result{Output: map[string]any{"status": "approved"}, Next: []string{"process_payment"}}, nil
 
 // Halt this branch
-return dagflows.Result{Output: map[string]any{}, Stop: true}, nil
+return runtime.Result{Output: map[string]any{}, Stop: true}, nil
 
 // Stream rows: an iterator is rows, a slice is a value
-return dagflows.Result{Output: parent.Iter(), ContentType: dagflows.NDJSON}, nil
+return runtime.Result{Output: parent.Iter(), ContentType: runtime.NDJSON}, nil
 ```
 
 A handler may return any `iter.Seq[T]` or `iter.Seq2[T, error]`, its rows are encoded lazily and offloaded to storage when they outgrow the inline limit. You never choose inline versus reference: the platform decides from what it offered the run and what the node returned.
@@ -205,7 +211,7 @@ A handler may return any `iter.Seq[T]` or `iter.Seq2[T, error]`, its rows are en
 To decide routing from what was streamed, write through `ctx.OutputStream`:
 
 ```go
-out := ctx.OutputStream(dagflows.NDJSON)
+out := ctx.OutputStream(runtime.NDJSON)
 defer out.Abort()
 for record, err := range parent.Iter() {
 	if err != nil {
@@ -220,17 +226,17 @@ if err := out.Close(); err != nil {
 	return nil, err
 }
 ref, err := out.Ref()
-return dagflows.Result{Output: ref, Next: []string{branchFor(written)}}, nil
+return runtime.Result{Output: ref, Next: []string{branchFor(written)}}, nil
 ```
 
 `Close` commits; the deferred `Abort` discards a partial upload when the handler fails first, and does nothing after a successful `Close`.
 
 ## Error handling
 
-Return a `*dagflows.Fail` to signal a structured failure with retry instructions. Any other error is reported as permanent:
+Return a `*failure.Fail` to signal a structured failure with retry instructions. Any other error is reported as permanent:
 
 ```go
-return nil, &dagflows.Fail{Message: "Payment gateway unavailable", Category: dagflows.EXECUTION, RetryAfterMs: 30_000}
+return nil, &failure.Fail{Message: "Payment gateway unavailable", Category: failure.EXECUTION, RetryAfterMs: 30_000}
 ```
 
 Naming a delay implies "retry me"; naming nothing aborts. `Abort: new(false)` with no delay leaves retry timing to the workflow's policy. Categories: `EXECUTION`, `INFRASTRUCTURE`, `TIMEOUT`, `PERMANENT`. Anything else collapses to permanent, because an unknown category must never silently

@@ -36,9 +36,9 @@ func TestEveryPackageIsStandardLibraryOnly(t *testing.T) {
 }
 
 func TestTheRuntimeNeverImportsTheAuthoringHalf(t *testing.T) {
-	deps := goList(t, "-deps", "-f", "{{.ImportPath}}", "./internal/runtime")
+	deps := goList(t, "-deps", "-f", "{{.ImportPath}}", "./runtime")
 
-	require.NotContains(t, deps, module+"/internal/authoring")
+	require.NotContains(t, deps, module+"/authoring")
 	require.NotContains(t, deps, module+"/internal/cli")
 	require.NotContains(t, deps, module)
 }

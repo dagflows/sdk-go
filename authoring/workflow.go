@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dagflows/sdk-go/internal/runtime"
+	"github.com/dagflows/sdk-go/runtime"
 )
 
 var (
@@ -24,18 +24,18 @@ type WorkflowOptions struct {
 	Version            string
 	MaxConcurrentNodes int
 	MaxCycleCount      int
-	OnWarning OnWarning
+	OnWarning          OnWarning
 	// Retry sets default retry settings inherited and overridden field-by-field by nodes.
-	Retry *RetryConfig
+	Retry *Retry
 }
 
 // NodeOptions configures an individual node registration.
 type NodeOptions struct {
 	Key       string
 	Depends   []*NodeRef
-	Execution *ExecutionConfig
-	Transfer  *TransferConfig
-	Retry     *RetryConfig
+	Execution *Execution
+	Transfer  *Transfer
+	Retry     *Retry
 	Config    map[string]any
 	Type      string
 }
@@ -67,7 +67,7 @@ type Workflow struct {
 	MaxConcurrentNodes int
 	MaxCycleCount      int
 	OnWarning          OnWarning
-	Retry              *RetryConfig
+	Retry              *Retry
 
 	nodes    []*NodeManifest
 	handlers map[string]runtime.Handler

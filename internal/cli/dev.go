@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dagflows/sdk-go/internal/authoring"
-	"github.com/dagflows/sdk-go/internal/runtime"
+	"github.com/dagflows/sdk-go/authoring"
+	"github.com/dagflows/sdk-go/runtime"
 )
 
 func devUsage() string {

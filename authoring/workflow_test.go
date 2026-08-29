@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/dagflows/sdk-go/internal/runtime"
+	"github.com/dagflows/sdk-go/runtime"
 	"github.com/stretchr/testify/require"
 )
 
@@ -156,11 +156,11 @@ func TestExecutionSettingsSplitBetweenTheBlockAndConfig(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
 	wf.Node(first, NodeOptions{
 		Key: "heavy",
-		Execution: &ExecutionConfig{
+		Execution: &Execution{
 			Machine:     "l",
 			TimeoutSecs: 30,
 		},
-		Transfer: &TransferConfig{
+		Transfer: &Transfer{
 			MaxOutputMB:     64,
 			ConnTimeoutSecs: 5,
 		},
@@ -190,7 +190,7 @@ func TestANodeAskingForNothingStatesNoExecutionBlock(t *testing.T) {
 
 func TestAReservedGPUIsRefusedWhereItIsWritten(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
-	wf.Node(first, NodeOptions{Key: "g", Execution: &ExecutionConfig{GPU: "a100"}})
+	wf.Node(first, NodeOptions{Key: "g", Execution: &Execution{GPU: "a100"}})
 
 	_, err := wf.Manifest()
 	require.ErrorContains(t, err, "gpu")
@@ -199,7 +199,7 @@ func TestAReservedGPUIsRefusedWhereItIsWritten(t *testing.T) {
 func TestTheDeclaredCeilingReachesTheManifest(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
 	wf.Node(first, NodeOptions{
-		Transfer: &TransferConfig{
+		Transfer: &Transfer{
 			MaxOutputMB: 500,
 		},
 	})
@@ -229,7 +229,7 @@ func TestRetryReachesTheManifest(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
 	wf.Node(first, NodeOptions{
 		Key: "flaky",
-		Retry: &RetryConfig{
+		Retry: &Retry{
 			MaxAttempts:      new(3),
 			InitialBackoffMs: new(500),
 		},
@@ -243,7 +243,7 @@ func TestRetryReachesTheManifest(t *testing.T) {
 	// Unset fields remain nil so platform and workflow defaults can be applied.
 	partial := NewWorkflow("demo", WorkflowOptions{})
 	partial.Node(first, NodeOptions{
-		Retry: &RetryConfig{
+		Retry: &Retry{
 			MaxAttempts: new(2),
 		},
 	})
@@ -256,7 +256,7 @@ func TestRetryReachesTheManifest(t *testing.T) {
 // Tests that a workflow default reaches the manifest for the platform to merge.
 func TestWorkflowRetryDefaultReachesTheManifest(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{
-		Retry: &RetryConfig{
+		Retry: &Retry{
 			MaxAttempts: new(4),
 			RetryOn:     []RetryCategory{RetryOnInfrastructure, RetryOnTimeout},
 		},
@@ -277,13 +277,13 @@ func TestWorkflowRetryDefaultReachesTheManifest(t *testing.T) {
 // Tests that a category the platform would never retry is refused at declaration.
 func TestRetryOnRefusesWhatCannotBeRetried(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
-	wf.Node(first, NodeOptions{Retry: &RetryConfig{RetryOn: []RetryCategory{"permanent"}}})
+	wf.Node(first, NodeOptions{Retry: &Retry{RetryOn: []RetryCategory{"permanent"}}})
 
 	_, err := wf.Manifest()
 	require.ErrorContains(t, err, "a retry cannot help")
 
 	unknown := NewWorkflow("demo", WorkflowOptions{})
-	unknown.Node(first, NodeOptions{Retry: &RetryConfig{RetryOn: []RetryCategory{"flaky"}}})
+	unknown.Node(first, NodeOptions{Retry: &Retry{RetryOn: []RetryCategory{"flaky"}}})
 
 	_, err = unknown.Manifest()
 	require.ErrorContains(t, err, "unknown category")
@@ -292,7 +292,7 @@ func TestRetryOnRefusesWhatCannotBeRetried(t *testing.T) {
 func TestNegativeSettingsAreRefusedByName(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})
 	wf.Node(first, NodeOptions{
-		Execution: &ExecutionConfig{
+		Execution: &Execution{
 			TimeoutSecs: -1,
 		},
 	})
@@ -302,7 +302,7 @@ func TestNegativeSettingsAreRefusedByName(t *testing.T) {
 
 	retry := NewWorkflow("demo", WorkflowOptions{})
 	retry.Node(first, NodeOptions{
-		Retry: &RetryConfig{
+		Retry: &Retry{
 			MaxAttempts: new(-2),
 		},
 	})
@@ -410,18 +410,18 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
 	})
 	step1 := wf.Node(first, NodeOptions{
 		Key: "step_1",
-		Execution: &ExecutionConfig{
+		Execution: &Execution{
 			Machine: "m",
 		},
 	})
 	step2 := wf.Node(second, NodeOptions{
 		Key:     "step_2",
 		Depends: []*NodeRef{step1},
-		Execution: &ExecutionConfig{
+		Execution: &Execution{
 			Machine:     "m",
 			TimeoutSecs: 30,
 		},
-		Retry: &RetryConfig{
+		Retry: &Retry{
 			MaxAttempts:      new(2),
 			InitialBackoffMs: new(1000),
 		},

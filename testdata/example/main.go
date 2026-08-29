@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/dagflows/sdk-go"
+	dagflows "github.com/dagflows/sdk-go"
+	"github.com/dagflows/sdk-go/authoring"
+	"github.com/dagflows/sdk-go/failure"
+	"github.com/dagflows/sdk-go/runtime"
 )
 
 // count counts records received from the seed parent input.
-func count(_ *dagflows.Ctx, inputs *dagflows.Inputs) (any, error) {
+func count(_ *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
 	fmt.Println("working")
 
 	seed, err := inputs.Get("seed")
@@ -31,7 +34,7 @@ func count(_ *dagflows.Ctx, inputs *dagflows.Inputs) (any, error) {
 }
 
 // compute performs arithmetic multiplication on the seed factor input.
-func compute(_ *dagflows.Ctx, inputs *dagflows.Inputs) (any, error) {
+func compute(_ *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
 	seed, err := inputs.Get("seed")
 	if err != nil {
 		return nil, err
@@ -51,13 +54,13 @@ func compute(_ *dagflows.Ctx, inputs *dagflows.Inputs) (any, error) {
 }
 
 // export streams processed rows to the output writer and determines next-hop routing.
-func export(ctx *dagflows.Ctx, inputs *dagflows.Inputs) (any, error) {
+func export(ctx *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
 	seed, err := inputs.One()
 	if err != nil {
 		return nil, err
 	}
 
-	out := ctx.OutputStream(dagflows.NDJSON)
+	out := ctx.OutputStream(runtime.NDJSON)
 	defer out.Abort()
 
 	written := 0
@@ -88,64 +91,64 @@ func export(ctx *dagflows.Ctx, inputs *dagflows.Inputs) (any, error) {
 		next = "empty"
 	}
 
-	return dagflows.Result{
+	return runtime.Result{
 		Output: ref,
 		Next:   []string{next},
 	}, nil
 }
 
-func fails(*dagflows.Ctx, *dagflows.Inputs) (any, error) {
-	return nil, &dagflows.Fail{
+func fails(*runtime.Ctx, *runtime.Inputs) (any, error) {
+	return nil, &failure.Fail{
 		Message:  "upstream returned 503",
-		Category: dagflows.INFRASTRUCTURE,
+		Category: failure.INFRASTRUCTURE,
 		Abort:    new(false),
 	}
 }
 
-func crashes(*dagflows.Ctx, *dagflows.Inputs) (any, error) {
+func crashes(*runtime.Ctx, *runtime.Inputs) (any, error) {
 	var rows []int
 
 	return rows[3], nil
 }
 
-func version(*dagflows.Ctx, *dagflows.Inputs) (any, error) {
+func version(*runtime.Ctx, *runtime.Inputs) (any, error) {
 	return map[string]any{
 		"sdk": dagflows.Version(),
 	}, nil
 }
 
 func main() {
-	wf := dagflows.NewWorkflow("demo", dagflows.WorkflowOptions{
+	wf := authoring.NewWorkflow("demo", authoring.WorkflowOptions{
 		Version:            "1.26",
 		MaxConcurrentNodes: 5,
 	})
 
-	counted := wf.Node(count, dagflows.NodeOptions{
-		Execution: &dagflows.ExecutionConfig{
+	counted := wf.Node(count, authoring.NodeOptions{
+		Execution: &authoring.Execution{
 			Machine: "m",
 		},
 	})
-	computed := wf.Node(compute, dagflows.NodeOptions{
-		Depends: []*dagflows.NodeRef{counted},
-		Execution: &dagflows.ExecutionConfig{
+	computed := wf.Node(compute, authoring.NodeOptions{
+		Depends: []*authoring.NodeRef{counted},
+		Execution: &authoring.Execution{
 			Machine:     "m",
 			TimeoutSecs: 30,
 		},
-		Retry: &dagflows.RetryConfig{
+		Retry: &authoring.Retry{
 			MaxAttempts: new(2),
-			RetryOn:     []dagflows.RetryCategory{dagflows.RetryOnInfrastructure, dagflows.RetryOnTimeout},
+			RetryOn:     []authoring.RetryCategory{authoring.RetryOnInfrastructure, authoring.RetryOnTimeout},
 		},
 	})
-	wf.Node(export, dagflows.NodeOptions{
+	wf.Node(export, authoring.NodeOptions{
 		Key:     "report",
-		Depends: []*dagflows.NodeRef{computed, wf.ExternalNode("crunch")},
-		Transfer: &dagflows.TransferConfig{
+		Depends: []*authoring.NodeRef{computed, wf.ExternalNode("crunch")},
+		Transfer: &authoring.Transfer{
 			MaxOutputMB: 64,
 		},
 	})
-	wf.Node(fails, dagflows.NodeOptions{})
-	wf.Node(crashes, dagflows.NodeOptions{})
-	wf.Node(version, dagflows.NodeOptions{})
+	wf.Node(fails, authoring.NodeOptions{})
+	wf.Node(crashes, authoring.NodeOptions{})
+	wf.Node(version, authoring.NodeOptions{})
 
 	dagflows.Main()
 }

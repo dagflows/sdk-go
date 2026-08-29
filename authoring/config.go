@@ -9,8 +9,8 @@ import (
 
 const millisPerSecond = 1_000
 
-// ExecutionConfig defines resource and execution configuration options for a node.
-type ExecutionConfig struct {
+// Execution defines resource and execution configuration options for a node.
+type Execution struct {
 	// Machine names a size from the platform catalog (e.g. "s", "m", "l").
 	Machine string
 	// TimeoutSecs bounds a single execution of the node.
@@ -19,7 +19,7 @@ type ExecutionConfig struct {
 	GPU string
 }
 
-func (c *ExecutionConfig) validate() error {
+func (c *Execution) validate() error {
 	if c.GPU != "" {
 		return fmt.Errorf("gpu is reserved, this platform does not offer one yet")
 	}
@@ -33,8 +33,8 @@ func (c *ExecutionConfig) validate() error {
 	)
 }
 
-// TransferConfig configures how a node moves data in and out of storage.
-type TransferConfig struct {
+// Transfer configures how a node moves data in and out of storage.
+type Transfer struct {
 	// MaxOutputMB is how much this node expects to emit. Leaving it out asks
 	// for no multipart upload, which is not the same as asking for zero.
 	MaxOutputMB int
@@ -45,7 +45,7 @@ type TransferConfig struct {
 	IdleTimeoutSecs int
 }
 
-func (c *TransferConfig) validate() error {
+func (c *Transfer) validate() error {
 	return nonNegative(
 		field{"max_output_mb", c.MaxOutputMB},
 		field{"conn_timeout_secs", c.ConnTimeoutSecs},
@@ -54,7 +54,7 @@ func (c *TransferConfig) validate() error {
 }
 
 // asManifest serializes configured transfer options for the build manifest.
-func (c *TransferConfig) asManifest() *TransferManifest {
+func (c *Transfer) asManifest() *TransferManifest {
 	if c.MaxOutputMB == 0 && c.ConnTimeoutSecs == 0 && c.IdleTimeoutSecs == 0 {
 		return nil
 	}
@@ -79,7 +79,7 @@ func (c *TransferConfig) asManifest() *TransferManifest {
 }
 
 // asManifest serializes configured execution options for the build manifest.
-func (c *ExecutionConfig) asManifest() *ExecutionManifest {
+func (c *Execution) asManifest() *ExecutionManifest {
 	if c.Machine == "" && c.TimeoutSecs == 0 {
 		return nil
 	}
@@ -97,8 +97,8 @@ func (c *ExecutionConfig) asManifest() *ExecutionManifest {
 	return out
 }
 
-// RetryConfig configures optional node retry settings where unstated fields inherit platform defaults.
-type RetryConfig struct {
+// Retry configures optional node retry settings where unstated fields inherit platform defaults.
+type Retry struct {
 	// MaxAttempts includes the initial execution (1 means no retries).
 	MaxAttempts *int
 	// InitialBackoffMs is the starting delay that doubles per attempt up to MaxBackoffMs.
@@ -138,7 +138,7 @@ var RetryableCategories = []RetryCategory{
 	RetryOnExecution,
 }
 
-func (r *RetryConfig) validate() error {
+func (r *Retry) validate() error {
 	if r.MaxAttempts != nil && *r.MaxAttempts < 1 {
 		return fmt.Errorf("max_attempts=%d would never run the node, 1 means run once and do not retry",
 			*r.MaxAttempts)
@@ -177,7 +177,7 @@ func (r *RetryConfig) validate() error {
 	return nil
 }
 
-func (r *RetryConfig) asManifest() *RetryManifest {
+func (r *Retry) asManifest() *RetryManifest {
 	out := &RetryManifest{
 		MaxAttempts:      r.MaxAttempts,
 		InitialBackoffMs: r.InitialBackoffMs,

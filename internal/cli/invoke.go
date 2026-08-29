@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dagflows/sdk-go/internal/runtime"
+	"github.com/dagflows/sdk-go/runtime"
 )
 
 const invokeUsage = "usage: ./app [invoke [--node <key>]] with DAGFLOWS_INPUT and DAGFLOWS_OUTPUT set"
