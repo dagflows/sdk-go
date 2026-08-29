@@ -19,8 +19,8 @@ type Failed struct {
 }
 
 type FailureError struct {
-	Message  string `json:"message"`
-	Category string `json:"category"`
+	Message  string          `json:"message"`
+	Category FailureCategory `json:"category"`
 }
 
 type Retry struct {

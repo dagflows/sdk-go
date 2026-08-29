@@ -488,10 +488,10 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
 
 // Tests that configured on_warning policy settings serialize to the build manifest.
 func TestOnWarningReachesTheManifest(t *testing.T) {
-	wf := NewWorkflow("demo", WorkflowOptions{OnWarning: "reject"})
+	wf := NewWorkflow("demo", WorkflowOptions{OnWarning: OnWarningReject})
 	wf.Node(first, NodeOptions{})
 
-	require.Equal(t, "reject", manifestOf(t, wf).Workflow.OnWarning)
+	require.Equal(t, OnWarningReject, manifestOf(t, wf).Workflow.OnWarning)
 }
 
 func TestAWorkflowStatingNoPolicyEmitsNone(t *testing.T) {

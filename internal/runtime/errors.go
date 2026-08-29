@@ -1,15 +1,18 @@
 package runtime
 
+// FailureCategory classifies node failures to determine retry behavior.
+type FailureCategory string
+
 // Failure categories that the worker recognizes.
 const (
-	PERMANENT      = "permanent"
-	INFRASTRUCTURE = "infrastructure"
-	TIMEOUT        = "timeout"
-	EXECUTION      = "execution"
+	PERMANENT      FailureCategory = "permanent"
+	INFRASTRUCTURE FailureCategory = "infrastructure"
+	TIMEOUT        FailureCategory = "timeout"
+	EXECUTION      FailureCategory = "execution"
 )
 
 // knownCategory checks if the worker retry policy understands this category.
-func knownCategory(category string) bool {
+func knownCategory(category FailureCategory) bool {
 	switch category {
 	case PERMANENT, INFRASTRUCTURE, TIMEOUT, EXECUTION:
 		return true
@@ -29,7 +32,7 @@ type Fail struct {
 	// Category defaults to PERMANENT if empty or unrecognized, except when a
 	// delay is named: a permanent failure is never retried, so defaulting to it
 	// would silently discard the delay the caller asked for.
-	Category string
+	Category FailureCategory
 
 	// RetryAfterMs is the retry delay in milliseconds, the unit the platform's
 	// backoff settings use and the one it is capped against. Zero means no
@@ -45,7 +48,7 @@ func (f *Fail) Error() string {
 }
 
 // category returns the validated category, omitting it when a delay is set to avoid defaulting to permanent.
-func (f *Fail) category() string {
+func (f *Fail) category() FailureCategory {
 	if knownCategory(f.Category) {
 		return f.Category
 	}

@@ -111,6 +111,19 @@ type RetryConfig = authoring.RetryConfig
 // RetryCategory is a failure category a node may ask to retry.
 type RetryCategory = authoring.RetryCategory
 
+// OnWarning is what a deploy does when the platform has to adjust a value the
+// author declared.
+type OnWarning = authoring.OnWarning
+
+// Deploy policies for an adjusted value.
+const (
+	OnWarningAllow  = authoring.OnWarningAllow
+	OnWarningReject = authoring.OnWarningReject
+)
+
+// FailureCategory is how a node failed, which decides whether a retry helps.
+type FailureCategory = runtime.FailureCategory
+
 // Retry categories that nodes can opt into retrying.
 const (
 	RetryOnInfrastructure = authoring.RetryOnInfrastructure

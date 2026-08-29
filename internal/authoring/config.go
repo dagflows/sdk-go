@@ -108,6 +108,19 @@ type RetryConfig struct {
 	RetryOn []RetryCategory
 }
 
+// OnWarning is what a deploy does when the platform has to adjust a declared
+// value. A named type so a typo is a compile error rather than a policy the
+// platform quietly ignores.
+type OnWarning string
+
+const (
+	// OnWarningAllow clamps and carries on, reporting the adjustment.
+	OnWarningAllow OnWarning = "allow"
+	// OnWarningReject refuses the deploy rather than run settings the author
+	// did not write.
+	OnWarningReject OnWarning = "reject"
+)
+
 // RetryCategory identifies a retryable failure category.
 type RetryCategory string
 

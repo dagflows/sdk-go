@@ -33,7 +33,7 @@ type WorkflowManifest struct {
 	MaxCycleCount      int    `json:"max_cycle_count,omitempty"`
 	// OnWarning is what the deploy does when the platform has to adjust a
 	// declared value: "allow" clamps and carries on, "reject" refuses.
-	OnWarning string             `json:"on_warning,omitempty"`
+	OnWarning OnWarning          `json:"on_warning,omitempty"`
 	Retry     *RetryManifest     `json:"retry,omitempty"`
 	Execution *ExecutionManifest `json:"execution,omitempty"`
 }
