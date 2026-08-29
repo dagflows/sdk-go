@@ -230,7 +230,7 @@ return dagflows.Result{Output: ref, Next: []string{branchFor(written)}}, nil
 Return a `*dagflows.Fail` to signal a structured failure with retry instructions. Any other error is reported as permanent:
 
 ```go
-return nil, &dagflows.Fail{Message: "Payment gateway unavailable", Category: dagflows.EXECUTION, RetryAfter: 30}
+return nil, &dagflows.Fail{Message: "Payment gateway unavailable", Category: dagflows.EXECUTION, RetryAfterMs: 30_000}
 ```
 
 Naming a delay implies "retry me"; naming nothing aborts. `Abort: new(false)` with no delay leaves retry timing to the workflow's policy. Categories: `EXECUTION`, `INFRASTRUCTURE`, `TIMEOUT`, `PERMANENT`. Anything else collapses to permanent, because an unknown category must never silently
