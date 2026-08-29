@@ -50,7 +50,7 @@ func TestLoadReadsCtxAndInputs(t *testing.T) {
 			"runtime_version":  "1.26",
 			"abi":              "deb13",
 			"timeout_seconds":  600,
-			"memory_limit_mb":  512,
+			"memory_mb":        512,
 			"inline_max_bytes": 1024,
 		},
 		"payload": map[string]any{
@@ -64,7 +64,7 @@ func TestLoadReadsCtxAndInputs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "transform", ctx.NodeKey)
 	require.Equal(t, "1.26", ctx.RuntimeVersion)
-	require.Equal(t, 512, ctx.MemoryLimitMB)
+	require.Equal(t, 512, ctx.MemoryMB)
 	require.Equal(t, 1024, ctx.InlineMaxBytes)
 
 	value, err := mustGet(t, inputs, "seed").Value()
@@ -89,7 +89,7 @@ func TestInlineMaxBytesFallsBackWhenUnstated(t *testing.T) {
 func TestNumericFieldsCoerceIntsAndFloatsAndDefaultOtherwise(t *testing.T) {
 	ctx := CtxFromRaw(map[string]any{
 		"attempt":          json.Number("2"),
-		"memory_limit_mb":  json.Number("512.0"),
+		"memory_mb":        json.Number("512.0"),
 		"milli_cores":      "lots",
 		"timeout_seconds":  nil,
 		"inline_max_bytes": true,
@@ -97,7 +97,7 @@ func TestNumericFieldsCoerceIntsAndFloatsAndDefaultOtherwise(t *testing.T) {
 	})
 
 	require.Equal(t, 2, ctx.Attempt)
-	require.Equal(t, 512, ctx.MemoryLimitMB)
+	require.Equal(t, 512, ctx.MemoryMB)
 	require.Zero(t, ctx.MilliCores)
 	require.Zero(t, ctx.TimeoutSeconds)
 	require.Equal(t, DefaultInlineMaxBytes, ctx.InlineMaxBytes)

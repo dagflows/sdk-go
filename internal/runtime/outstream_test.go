@@ -46,7 +46,7 @@ func streamCtx(inlineMaxBytes int, url, key string) *Ctx {
 		InlineMaxBytes:  inlineMaxBytes,
 		OutputUploadURL: url,
 		OutputKey:       key,
-		MemoryLimitMB:   512,
+		MemoryMB:        512,
 	}
 }
 

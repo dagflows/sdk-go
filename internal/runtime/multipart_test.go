@@ -244,7 +244,7 @@ func multipartCtx(base string) *Ctx {
 		InlineMaxBytes:  1024,
 		OutputUploadURL: base + "/put",
 		OutputKey:       "k",
-		MemoryLimitMB:   512,
+		MemoryMB:        512,
 		Raw: map[string]any{
 			"output_multipart": map[string]any{
 				"upload_id":    "upload-1",

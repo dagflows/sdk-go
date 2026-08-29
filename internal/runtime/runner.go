@@ -135,7 +135,7 @@ func Execute(handler Handler, ctx *Ctx, inputs *Inputs) (envelope any) {
 		return Failure(err)
 	}
 
-	success, err := ToEnvelope(answer, ctx.InlineMaxBytes, ctx.upload(), ctx.MemoryLimitMB, ctx.Multipart())
+	success, err := ToEnvelope(answer, ctx.InlineMaxBytes, ctx.upload(), ctx.MemoryMB, ctx.Multipart())
 	if err != nil {
 		return Failure(err)
 	}

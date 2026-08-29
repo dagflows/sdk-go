@@ -482,7 +482,7 @@ func (o *devOptions) envelope() ordered {
 			{"config", map[string]any{}},
 			{"timeout_seconds", 0},
 			{"attempt", 0},
-			{"memory_limit_mb", o.memoryLimitMB},
+			{"memory_mb", o.memoryLimitMB},
 			{"inline_max_bytes", o.inlineMaxBytes},
 		}},
 		{"payload", ordered{

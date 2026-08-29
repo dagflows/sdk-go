@@ -236,14 +236,14 @@ func TestAStreamedResultInlinesWhenItIsSmall(t *testing.T) {
 func TestCtxExposesTheLimitsTheRunIsHeldTo(t *testing.T) {
 	result := node(t, func(ctx *Ctx, _ *Inputs) (any, error) {
 		return map[string]any{
-			"memory":  ctx.MemoryLimitMB,
+			"memory":  ctx.MemoryMB,
 			"cores":   ctx.MilliCores,
 			"attempt": ctx.Attempt,
 		}, nil
 	}, map[string]any{
-		"memory_limit_mb": 512,
-		"milli_cores":     1000,
-		"attempt":         2,
+		"memory_mb":   512,
+		"milli_cores": 1000,
+		"attempt":     2,
 	}, nil)
 
 	require.Equal(t, map[string]any{

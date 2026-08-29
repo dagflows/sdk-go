@@ -24,7 +24,7 @@ type Ctx struct {
 	Config          map[string]any
 	TimeoutSeconds  int
 	Attempt         int
-	MemoryLimitMB   int
+	MemoryMB        int
 	MilliCores      int
 	InlineMaxBytes  int
 	OutputUploadURL string
@@ -53,7 +53,7 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 		Config:          config,
 		TimeoutSeconds:  int(Num(raw["timeout_seconds"], 0)),
 		Attempt:         int(Num(raw["attempt"], 0)),
-		MemoryLimitMB:   int(Num(raw["memory_limit_mb"], 0)),
+		MemoryMB:        int(Num(raw["memory_mb"], 0)),
 		MilliCores:      int(Num(raw["milli_cores"], 0)),
 		InlineMaxBytes:  int(Num(raw["inline_max_bytes"], DefaultInlineMaxBytes)),
 		OutputUploadURL: Str(raw["output_upload_url"]),
@@ -69,7 +69,7 @@ func (c *Ctx) Multipart() *Multipart {
 
 // OutputStream creates a streaming writer for nodes that emit dynamic output.
 func (c *Ctx) OutputStream(contentType ContentType) *OutputStream {
-	return NewOutputStream(contentType, c.InlineMaxBytes, c.upload(), c.MemoryLimitMB, c.Multipart())
+	return NewOutputStream(contentType, c.InlineMaxBytes, c.upload(), c.MemoryMB, c.Multipart())
 }
 
 func (c *Ctx) upload() *Upload {
@@ -464,5 +464,5 @@ func Load(path string) (*Ctx, *Inputs, error) {
 	payload, _ := envelope["payload"].(map[string]any)
 	entries, _ := payload["inputs"].(map[string]any)
 
-	return ctx, NewInputs(entries, ctx.MemoryLimitMB), nil
+	return ctx, NewInputs(entries, ctx.MemoryMB), nil
 }
