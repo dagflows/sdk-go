@@ -161,8 +161,8 @@ func TestExecutionSettingsSplitBetweenTheBlockAndConfig(t *testing.T) {
 			TimeoutSecs: 30,
 		},
 		Transfer: &TransferConfig{
-			MaxOutputMB:        64,
-			ConnectTimeoutSecs: 5,
+			MaxOutputMB:     64,
+			ConnTimeoutSecs: 5,
 		},
 	})
 
@@ -173,7 +173,7 @@ func TestExecutionSettingsSplitBetweenTheBlockAndConfig(t *testing.T) {
 
 	require.NotNil(t, node.Transfer)
 	require.Equal(t, int64(64), *node.Transfer.MaxOutputMB)
-	require.Equal(t, int64(5_000), *node.Transfer.ConnectTimeoutMs)
+	require.Equal(t, int64(5_000), *node.Transfer.ConnTimeoutMs)
 	require.Nil(t, node.Transfer.IdleTimeoutMs)
 
 	raw, err := json.Marshal(node.Config)

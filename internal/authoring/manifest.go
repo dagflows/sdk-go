@@ -50,9 +50,9 @@ type NodeManifest struct {
 
 // TransferManifest defines node transfer settings for the manifest.
 type TransferManifest struct {
-	MaxOutputMB      *int64 `json:"max_output_mb,omitempty"`
-	ConnectTimeoutMs *int64 `json:"connect_timeout_ms,omitempty"`
-	IdleTimeoutMs    *int64 `json:"idle_timeout_ms,omitempty"`
+	MaxOutputMB   *int64 `json:"max_output_mb,omitempty"`
+	ConnTimeoutMs *int64 `json:"conn_timeout_ms,omitempty"`
+	IdleTimeoutMs *int64 `json:"idle_timeout_ms,omitempty"`
 }
 
 // ExecutionManifest defines node execution settings for the manifest.

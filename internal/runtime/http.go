@@ -16,8 +16,8 @@ import (
 // Fallbacks for a host that sent no transfer block. The platform always does,
 // so these only cover a local run against a hand written envelope.
 const (
-	DefaultConnectTimeoutMs = 10_000
-	DefaultIdleTimeoutMs    = 60_000
+	DefaultConnTimeoutMs = 10_000
+	DefaultIdleTimeoutMs = 60_000
 )
 
 // httpTimeout limits idle wait duration per network operation rather than the entire transfer.

@@ -38,8 +38,8 @@ type TransferConfig struct {
 	// MaxOutputMB is how much this node expects to emit. Leaving it out asks
 	// for no multipart upload, which is not the same as asking for zero.
 	MaxOutputMB int
-	// ConnectTimeoutSecs bounds establishing a connection.
-	ConnectTimeoutSecs int
+	// ConnTimeoutSecs bounds establishing a connection.
+	ConnTimeoutSecs int
 	// IdleTimeoutSecs bounds the gap between chunks. This never bounds the
 	// whole transfer: a large upload that keeps moving is not stalled.
 	IdleTimeoutSecs int
@@ -48,14 +48,14 @@ type TransferConfig struct {
 func (c *TransferConfig) validate() error {
 	return nonNegative(
 		field{"max_output_mb", c.MaxOutputMB},
-		field{"connect_timeout_secs", c.ConnectTimeoutSecs},
+		field{"conn_timeout_secs", c.ConnTimeoutSecs},
 		field{"idle_timeout_secs", c.IdleTimeoutSecs},
 	)
 }
 
 // asManifest serializes configured transfer options for the build manifest.
 func (c *TransferConfig) asManifest() *TransferManifest {
-	if c.MaxOutputMB == 0 && c.ConnectTimeoutSecs == 0 && c.IdleTimeoutSecs == 0 {
+	if c.MaxOutputMB == 0 && c.ConnTimeoutSecs == 0 && c.IdleTimeoutSecs == 0 {
 		return nil
 	}
 
@@ -65,9 +65,9 @@ func (c *TransferConfig) asManifest() *TransferManifest {
 		out.MaxOutputMB = &mb
 	}
 
-	if c.ConnectTimeoutSecs != 0 {
-		ms := int64(c.ConnectTimeoutSecs) * millisPerSecond
-		out.ConnectTimeoutMs = &ms
+	if c.ConnTimeoutSecs != 0 {
+		ms := int64(c.ConnTimeoutSecs) * millisPerSecond
+		out.ConnTimeoutMs = &ms
 	}
 
 	if c.IdleTimeoutSecs != 0 {
