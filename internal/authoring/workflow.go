@@ -24,6 +24,9 @@ type WorkflowOptions struct {
 	Version            string
 	MaxConcurrentNodes int
 	MaxCycleCount      int
+	// OnWarning is what the deploy does when the platform has to adjust a
+	// declared value: "allow" clamps and carries on, "reject" refuses.
+	OnWarning string
 	// Retry sets default retry settings inherited and overridden field-by-field by nodes.
 	Retry *RetryConfig
 }
@@ -65,6 +68,7 @@ type Workflow struct {
 	Version            string
 	MaxConcurrentNodes int
 	MaxCycleCount      int
+	OnWarning          string
 	Retry              *RetryConfig
 
 	nodes    []*NodeManifest
@@ -84,6 +88,7 @@ func NewWorkflow(name string, opts WorkflowOptions) *Workflow {
 		Version:            opts.Version,
 		MaxConcurrentNodes: opts.MaxConcurrentNodes,
 		MaxCycleCount:      opts.MaxCycleCount,
+		OnWarning:          opts.OnWarning,
 		Retry:              opts.Retry,
 		handlers:           map[string]runtime.Handler{},
 	}
@@ -94,6 +99,13 @@ func NewWorkflow(name string, opts WorkflowOptions) *Workflow {
 
 	if opts.MaxConcurrentNodes < 0 || opts.MaxCycleCount < 0 {
 		wf.fail(errors.New("workflow limits cannot be negative"))
+	}
+
+	// Validates that on_warning specifies a supported policy.
+	switch opts.OnWarning {
+	case "", "allow", "reject":
+	default:
+		wf.fail(fmt.Errorf("on_warning '%s' is not a policy, use 'allow' or 'reject'", opts.OnWarning))
 	}
 
 	if opts.Retry != nil {
@@ -264,6 +276,7 @@ func (wf *Workflow) Manifest() (*Manifest, error) {
 			Name:               wf.Name,
 			MaxConcurrentNodes: wf.MaxConcurrentNodes,
 			MaxCycleCount:      wf.MaxCycleCount,
+			OnWarning:          wf.OnWarning,
 		}
 
 		if wf.Retry != nil {

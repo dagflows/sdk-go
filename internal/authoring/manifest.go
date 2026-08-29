@@ -28,11 +28,14 @@ type RuntimeManifest struct {
 }
 
 type WorkflowManifest struct {
-	Name               string             `json:"name"`
-	MaxConcurrentNodes int                `json:"max_concurrent_nodes,omitempty"`
-	MaxCycleCount      int                `json:"max_cycle_count,omitempty"`
-	Retry              *RetryManifest     `json:"retry,omitempty"`
-	Execution          *ExecutionManifest `json:"execution,omitempty"`
+	Name               string `json:"name"`
+	MaxConcurrentNodes int    `json:"max_concurrent_nodes,omitempty"`
+	MaxCycleCount      int    `json:"max_cycle_count,omitempty"`
+	// OnWarning is what the deploy does when the platform has to adjust a
+	// declared value: "allow" clamps and carries on, "reject" refuses.
+	OnWarning string             `json:"on_warning,omitempty"`
+	Retry     *RetryManifest     `json:"retry,omitempty"`
+	Execution *ExecutionManifest `json:"execution,omitempty"`
 }
 
 // NodeManifest describes an individual DAG node definition.
