@@ -55,9 +55,9 @@ func TestContentTypeIsAnOpenString(t *testing.T) {
 
 func TestErrorsMatchThroughWrappingWithAsTypeAndIs(t *testing.T) {
 	err := fmt.Errorf("syncing: %w", &dagflows.Fail{
-		Message:    "throttled",
-		Category:   dagflows.TIMEOUT,
-		RetryAfter: 5,
+		Message:      "throttled",
+		Category:     dagflows.TIMEOUT,
+		RetryAfterMs: 5_000,
 	})
 
 	fail, ok := errors.AsType[*dagflows.Fail](err)
