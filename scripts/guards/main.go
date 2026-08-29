@@ -225,7 +225,7 @@ var guards = []guard{
 	{
 		name: "runner: a failure without a delay aborts",
 		file: "internal/runtime/errors.go",
-		old:  "return f.RetryAfter == 0",
+		old:  "return f.RetryAfterMs == 0",
 		new:  "return false",
 		pkg:  "./internal/runtime", run: "TestAFailureWithoutADelayAborts",
 	},

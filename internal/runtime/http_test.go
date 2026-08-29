@@ -123,7 +123,7 @@ func TestAFailedReadIsRetryableOnTheWorkflowPolicy(t *testing.T) {
 	require.Equal(t, INFRASTRUCTURE, fail.Category)
 	require.NotNil(t, fail.Abort)
 	require.False(t, *fail.Abort)
-	require.Zero(t, fail.RetryAfter)
+	require.Zero(t, fail.RetryAfterMs)
 }
 
 func TestAFailureNeverLogsTheSignature(t *testing.T) {

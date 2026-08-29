@@ -19,18 +19,24 @@ func knownCategory(category string) bool {
 }
 
 // Fail signals a deliberate node failure with custom retry behavior.
-// Setting RetryAfter implies retry. Leaving Abort nil defaults to aborting
-// unless a RetryAfter delay is provided.
+//
+// Setting RetryAfterMs implies retry, so a failure that names a delay is not
+// treated as permanent unless the caller says so. Leaving Abort nil defaults to
+// aborting unless a delay is provided.
 type Fail struct {
 	Message string
 
-	// Category defaults to PERMANENT if empty or unrecognized.
+	// Category defaults to PERMANENT if empty or unrecognized, except when a
+	// delay is named: a permanent failure is never retried, so defaulting to it
+	// would silently discard the delay the caller asked for.
 	Category string
 
-	// RetryAfter is the retry delay in seconds. Zero means no delay was specified.
-	RetryAfter int
+	// RetryAfterMs is the retry delay in milliseconds, the unit the platform's
+	// backoff settings use and the one it is capped against. Zero means no
+	// delay was specified.
+	RetryAfterMs int
 
-	// Abort controls retry behavior. Nil defaults to false if RetryAfter is set, true otherwise.
+	// Abort controls retry behavior. Nil defaults to false if RetryAfterMs is set, true otherwise.
 	Abort *bool
 }
 
@@ -38,10 +44,14 @@ func (f *Fail) Error() string {
 	return f.Message
 }
 
-// category returns the validated category, falling back to PERMANENT.
+// category returns the validated category, omitting it when a delay is set to avoid defaulting to permanent.
 func (f *Fail) category() string {
 	if knownCategory(f.Category) {
 		return f.Category
+	}
+
+	if f.Category == "" && f.RetryAfterMs > 0 {
+		return ""
 	}
 
 	return PERMANENT
@@ -53,7 +63,7 @@ func (f *Fail) aborts() bool {
 		return *f.Abort
 	}
 
-	return f.RetryAfter == 0
+	return f.RetryAfterMs == 0
 }
 
 // OutputTooLarge means the encoded output exceeded what the node can hold.

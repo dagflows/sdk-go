@@ -122,9 +122,9 @@ func TestPrintsCannotCorruptTheAnswer(t *testing.T) {
 func TestADeliberateFailureCarriesItsCategoryAndRetry(t *testing.T) {
 	result := node(t, func(*Ctx, *Inputs) (any, error) {
 		return nil, &Fail{
-			Message:    "upstream returned 503",
-			Category:   INFRASTRUCTURE,
-			RetryAfter: 30,
+			Message:      "upstream returned 503",
+			Category:     INFRASTRUCTURE,
+			RetryAfterMs: 30_000,
 		}
 	}, nil, nil)
 
@@ -133,7 +133,7 @@ func TestADeliberateFailureCarriesItsCategoryAndRetry(t *testing.T) {
 		"message":  "upstream returned 503",
 		"category": "infrastructure",
 	}, result["error"])
-	require.Equal(t, map[string]any{"after_seconds": json.Number("30")}, result["retry"])
+	require.Equal(t, map[string]any{"after_ms": json.Number("30000")}, result["retry"])
 	require.NotContains(t, result, "output")
 }
 
@@ -151,9 +151,9 @@ func TestAFailureWithoutADelayAborts(t *testing.T) {
 func TestAnUnknownCategoryIsReportedAsPermanent(t *testing.T) {
 	result := node(t, func(*Ctx, *Inputs) (any, error) {
 		return nil, &Fail{
-			Message:    "odd",
-			Category:   "whatever",
-			RetryAfter: 5,
+			Message:      "odd",
+			Category:     "whatever",
+			RetryAfterMs: 5_000,
 		}
 	}, nil, nil)
 
@@ -191,9 +191,9 @@ func TestAPanicInTheNodeIsAFailedEnvelopeNotACrash(t *testing.T) {
 func TestAWrappedFailIsStillAFail(t *testing.T) {
 	result := node(t, func(*Ctx, *Inputs) (any, error) {
 		return nil, fmt.Errorf("while syncing: %w", &Fail{
-			Message:    "throttled",
-			Category:   TIMEOUT,
-			RetryAfter: 10,
+			Message:      "throttled",
+			Category:     TIMEOUT,
+			RetryAfterMs: 10_000,
 		})
 	}, nil, nil)
 
@@ -201,7 +201,7 @@ func TestAWrappedFailIsStillAFail(t *testing.T) {
 		"message":  "throttled",
 		"category": "timeout",
 	}, result["error"])
-	require.Equal(t, map[string]any{"after_seconds": json.Number("10")}, result["retry"])
+	require.Equal(t, map[string]any{"after_ms": json.Number("10000")}, result["retry"])
 }
 
 func TestAnOversizeOutputFailsTheNodeRatherThanWritingABadEnvelope(t *testing.T) {
@@ -270,29 +270,32 @@ func TestARetryableFailureNamesNoDirectiveAtAll(t *testing.T) {
 func TestAnExplicitAbortWithADelayCarriesBoth(t *testing.T) {
 	result := node(t, func(*Ctx, *Inputs) (any, error) {
 		return nil, &Fail{
-			Message:    "x",
-			RetryAfter: 5,
-			Abort:      new(true),
+			Message:      "x",
+			RetryAfterMs: 5_000,
+			Abort:        new(true),
 		}
 	}, nil, nil)
 
 	require.Equal(t, map[string]any{
-		"abort":         true,
-		"after_seconds": json.Number("5"),
+		"abort":    true,
+		"after_ms": json.Number("5000"),
 	}, result["retry"])
 }
 
 func TestTheEnvelopeIsWrittenCompactAndInOrder(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out.json")
 
+	// Naming a delay and no category leaves the failure uncategorised rather
+	// than permanent, because a permanent failure is never retried and the
+	// delay would be discarded without a word.
 	require.NoError(t, Write(Failure(&Fail{
-		Message:    "a <b>",
-		RetryAfter: 3,
+		Message:      "a <b>",
+		RetryAfterMs: 3_000,
 	}), out))
 
 	body, err := os.ReadFile(out)
 	require.NoError(t, err)
-	require.Equal(t, `{"status":"FAILED","error":{"message":"a <b>","category":"permanent"},"retry":{"after_seconds":3}}`, string(body))
+	require.Equal(t, `{"status":"FAILED","error":{"message":"a <b>","category":""},"retry":{"after_ms":3000}}`, string(body))
 }
 
 func TestWriteWithoutAnOutputPathNamesTheRemedy(t *testing.T) {

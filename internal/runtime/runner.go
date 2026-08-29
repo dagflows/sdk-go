@@ -24,8 +24,8 @@ type FailureError struct {
 }
 
 type Retry struct {
-	Abort        bool `json:"abort,omitempty"`
-	AfterSeconds *int `json:"after_seconds,omitempty"`
+	Abort   bool `json:"abort,omitempty"`
+	AfterMs *int `json:"after_ms,omitempty"`
 }
 
 // maxMessageBytes limits failure message length to avoid payload truncation by transport caps.
@@ -73,11 +73,11 @@ func Failure(err error) *Failed {
 		Abort: fail.aborts(),
 	}
 
-	if fail.RetryAfter != 0 {
-		retry.AfterSeconds = new(fail.RetryAfter)
+	if fail.RetryAfterMs != 0 {
+		retry.AfterMs = new(fail.RetryAfterMs)
 	}
 
-	if retry.Abort || retry.AfterSeconds != nil {
+	if retry.Abort || retry.AfterMs != nil {
 		out.Retry = retry
 	}
 
