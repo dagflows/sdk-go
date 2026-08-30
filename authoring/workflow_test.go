@@ -157,7 +157,7 @@ func TestExecutionSettingsSplitBetweenTheBlockAndConfig(t *testing.T) {
 	wf.Node(first, NodeOptions{
 		Key: "heavy",
 		Execution: &Execution{
-			Machine:     "l",
+			Machine:     "gp-8",
 			TimeoutSecs: 30,
 		},
 		Transfer: &Transfer{
@@ -168,7 +168,7 @@ func TestExecutionSettingsSplitBetweenTheBlockAndConfig(t *testing.T) {
 
 	node := manifestOf(t, wf).Nodes[0]
 	require.NotNil(t, node.Execution)
-	require.Equal(t, "l", node.Execution.Machine)
+	require.Equal(t, "gp-8", node.Execution.Machine)
 	require.Equal(t, int64(30_000), *node.Execution.TimeoutMs)
 
 	require.NotNil(t, node.Transfer)
@@ -411,14 +411,14 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
 	step1 := wf.Node(first, NodeOptions{
 		Key: "step_1",
 		Execution: &Execution{
-			Machine: "m",
+			Machine: "gp-4",
 		},
 	})
 	step2 := wf.Node(second, NodeOptions{
 		Key:     "step_2",
 		Depends: []*NodeRef{step1},
 		Execution: &Execution{
-			Machine:     "m",
+			Machine:     "gp-4",
 			TimeoutSecs: 30,
 		},
 		Retry: &Retry{
@@ -452,7 +452,7 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
       "key": "step_1",
       "entrypoint": "app",
       "execution": {
-        "machine": "m"
+        "machine": "gp-4"
       }
     },
     {
@@ -466,7 +466,7 @@ func TestTheManifestEncodesInPythonsKeyOrder(t *testing.T) {
         "initial_backoff_ms": 1000
       },
       "execution": {
-        "machine": "m",
+        "machine": "gp-4",
         "timeout_ms": 30000
       }
     },

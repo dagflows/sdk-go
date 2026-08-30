@@ -108,7 +108,7 @@ func main() {
 
 	wf.Node(extractData, authoring.NodeOptions{
 		Key:       "extract_data",
-		Execution: &authoring.Execution{Machine: "l", TimeoutSecs: 300},
+		Execution: &authoring.Execution{Machine: "gp-8", TimeoutSecs: 300},
 		// Only the platform's own failures are retried unless a node says
 		// otherwise. Settings are pointers so leaving one out means "let the
 		// platform decide" rather than zero, and new(5) states one inline.
@@ -122,7 +122,7 @@ func main() {
 }
 ```
 
-Use `Machine` to select a resource tier from the platform catalog (e.g. `"xs"`, `"s"`, `"m"`, `"l"`, `"xl"`). Set `TimeoutSecs` to cap node execution duration in seconds, and declare `MaxOutputMB` if your node needs multipart upload capabilities for large outputs.
+Use `Machine` to select a resource tier from the platform catalog (e.g. `"gp-1"`, `"gp-2"`, `"gp-4"`, `"gp-8"`, `"gp-16"`). The name carries the memory in GB, so `gp-8` is the 8 GB tier. Set `TimeoutSecs` to cap node execution duration in seconds, and declare `MaxOutputMB` if your node needs multipart upload capabilities for large outputs.
 
 `MaxAttempts` counts the first run, so `1` means run once and do not retry. Backoff doubles per attempt up to `MaxBackoffMs`.
 

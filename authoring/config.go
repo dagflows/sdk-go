@@ -11,7 +11,7 @@ const millisPerSecond = 1_000
 
 // Execution defines resource and execution configuration options for a node.
 type Execution struct {
-	// Machine names a size from the platform catalog (e.g. "s", "m", "l").
+	// Machine names one from the platform catalog (e.g. "gp-2", "gp-4", "gp-8").
 	Machine string
 	// TimeoutSecs bounds a single execution of the node.
 	TimeoutSecs int
