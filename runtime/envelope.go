@@ -176,8 +176,29 @@ func (in *Input) isReference() bool {
 	return in.Type() == REFERENCE
 }
 
+// refuseUnknownType rejects a block type this runtime does not know. Reading an
+// unknown type as inline would hand the handler the missing data field, so a
+// node baked against an older SDK would report success on nothing.
+func (in *Input) refuseUnknownType() error {
+	kind := in.Type()
+	if kind == INLINE || kind == REFERENCE {
+		return nil
+	}
+
+	return &InputUnavailable{
+		Message: fmt.Sprintf(
+			"'%s' is %s, which this runtime does not understand; rebuild the node against a newer SDK",
+			in.key, kind,
+		),
+	}
+}
+
 // Value materializes the input. Refuses references that exceed memory limits before downloading.
 func (in *Input) Value() (any, error) {
+	if err := in.refuseUnknownType(); err != nil {
+		return nil, err
+	}
+
 	if !in.isReference() {
 		return in.entry["data"], nil
 	}
@@ -255,6 +276,10 @@ func (in *Input) readAll() ([]byte, error) {
 
 // Bytes returns a stream reader for the raw payload.
 func (in *Input) Bytes() (io.ReadCloser, error) {
+	if err := in.refuseUnknownType(); err != nil {
+		return nil, err
+	}
+
 	if in.isReference() {
 		return stream(in.URL())
 	}
@@ -276,6 +301,11 @@ func (in *Input) Bytes() (io.ReadCloser, error) {
 // Iter yields records from the input, streaming on-demand for references.
 func (in *Input) Iter() rows {
 	return func(yield func(any, error) bool) {
+		if err := in.refuseUnknownType(); err != nil {
+			yield(nil, err)
+			return
+		}
+
 		kind := in.ContentType()
 
 		if !in.isReference() {

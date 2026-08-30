@@ -312,3 +312,54 @@ func TestAMissingReferenceIsAnInfrastructureFailure(t *testing.T) {
 	require.Equal(t, INFRASTRUCTURE, fail.Category)
 	require.Contains(t, fail.Message, "HTTP 404")
 }
+
+// A node keeps the SDK it was baked with, so it will meet input types added to
+// the platform after it shipped. Reading one as inline would hand the handler a
+// missing data field and report success on nothing.
+func unknownBlockType(t *testing.T) *Input {
+	t.Helper()
+
+	return mustGet(t, NewInputs(map[string]any{
+		"x": map[string]any{
+			"type":         "STREAM",
+			"url":          "nats://orders",
+			"content_type": "application/x-ndjson",
+		},
+	}, 0), "x")
+}
+
+func TestABlockTypeThisRuntimeDoesNotKnowRefusesToMaterialise(t *testing.T) {
+	_, err := unknownBlockType(t).Value()
+
+	require.ErrorAs(t, err, new(*InputUnavailable))
+	require.Contains(t, err.Error(), "is STREAM, which this runtime does not understand")
+}
+
+func TestABlockTypeThisRuntimeDoesNotKnowRefusesToIterate(t *testing.T) {
+	var got error
+
+	for _, err := range unknownBlockType(t).Iter() {
+		got = err
+		break
+	}
+
+	require.ErrorAs(t, got, new(*InputUnavailable))
+	require.Contains(t, got.Error(), "rebuild the node against a newer SDK")
+}
+
+func TestABlockTypeThisRuntimeDoesNotKnowRefusesToReadBytes(t *testing.T) {
+	_, err := unknownBlockType(t).Bytes()
+
+	require.ErrorAs(t, err, new(*InputUnavailable))
+}
+
+func TestAnEntryThatStatesNoTypeAtAllStillReadsAsInline(t *testing.T) {
+	handle := mustGet(t, NewInputs(map[string]any{
+		"x": map[string]any{"data": map[string]any{"id": "1"}, "content_type": "application/json"},
+	}, 0), "x")
+
+	value, err := handle.Value()
+
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"id": "1"}, value)
+}

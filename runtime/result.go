@@ -289,7 +289,26 @@ func NewRowSink(contentType ContentType, limit, cap int64, upload *Upload, multi
 	}
 }
 
+// refuseResultRow keeps a Result out of the row position. A Result here would be
+// flattened into an ordinary row carrying output/next/stop/meta as fields, which
+// is the shape per-record routing will want, so the slot stays reserved rather
+// than taken by an accident nodes could come to depend on.
+func refuseResultRow(row any) error {
+	switch row.(type) {
+	case Result, *Result:
+		return errors.New(
+			"a row cannot be a Result; yield the row itself, and set Next on the Result the handler returns. Per-row routing is not supported yet",
+		)
+	}
+
+	return nil
+}
+
 func (s *RowSink) Add(row any) error {
+	if err := refuseResultRow(row); err != nil {
+		return err
+	}
+
 	if s.uploader != nil {
 		encoded, err := s.encoder.Encode(row)
 		if err != nil {

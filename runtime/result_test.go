@@ -351,3 +351,35 @@ func must[T any](v T, err error) T {
 
 	return v
 }
+
+// Reserved for per-row routing. Without the guard a Result in the row position
+// is flattened into an ordinary row carrying output/next/stop/meta as fields.
+func TestAResultInTheRowPositionIsRefusedFromASequence(t *testing.T) {
+	_, err := ToEnvelope(
+		Result{Output: []any{Result{Output: map[string]any{"id": 1}}}, ContentType: NDJSON},
+		1<<20, nil, 0, nil,
+	)
+
+	require.ErrorContains(t, err, "a row cannot be a Result")
+}
+
+func TestAResultInTheRowPositionIsRefusedFromAnIterator(t *testing.T) {
+	rows := iter.Seq[any](func(yield func(any) bool) {
+		yield(&Result{Output: map[string]any{"id": 1}, Next: []string{"b"}})
+	})
+
+	_, err := ToEnvelope(Result{Output: rows, ContentType: NDJSON}, 1<<20, nil, 0, nil)
+
+	require.ErrorContains(t, err, "Per-row routing is not supported yet")
+}
+
+func TestTheReturnedResultItselfIsLeftAlone(t *testing.T) {
+	envelope, err := ToEnvelope(
+		Result{Output: []any{map[string]any{"id": 1}}, ContentType: NDJSON, Next: []string{"b"}},
+		1<<20, nil, 0, nil,
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"b"}, envelope.Next)
+	require.Equal(t, []any{map[string]any{"id": 1}}, envelope.Output.Data)
+}
