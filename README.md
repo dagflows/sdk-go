@@ -156,10 +156,7 @@ wf.Node(fulfillOrder, authoring.NodeOptions{
 ```go
 upstream, err := inputs.Get("fetch_orders")
 
-// The complete value, refused if it exceeds the node's memory limit
-data, err := upstream.Value()
-
-// One record at a time, without holding it all
+// One record at a time, whatever the input's size
 for record, err := range upstream.Iter() {
 	if err != nil {
 		return nil, err
@@ -167,11 +164,16 @@ for record, err := range upstream.Iter() {
 	process(record)
 }
 
+// The complete value, for an input small enough to hold
+data, err := upstream.Value()
+
 // Raw bytes for opaque content: a reader, not a byte slice
 body, err := upstream.Bytes()
 defer body.Close()
 io.Copy(sink, body)
 ```
+
+Reach for `Iter` first. It reads an inline handful of rows and a stored file of any size through the same loop, so a node written this way keeps working when its parent grows. `Value` is the convenience for an input you know is small: it holds the whole payload in memory and is refused when it exceeds the node's memory limit.
 
 Iteration yields one **record** at a time for row oriented payloads, which is what lets a node read more than it can hold. A JSON input has no records, so it yields the whole document as a single item.
 
@@ -207,6 +209,21 @@ return runtime.Result{Output: parent.Iter(), ContentType: runtime.NDJSON}, nil
 ```
 
 A handler may return any `iter.Seq[T]` or `iter.Seq2[T, error]`, its rows are encoded lazily and offloaded to storage when they outgrow the inline limit. You never choose inline versus reference: the platform decides from what it offered the run and what the node returned.
+
+Two rules apply to an iterator output:
+
+- **One yield is one row.** The output is NDJSON, even where a sequence yields a single value once. Return the value itself when a node produces one.
+- **An iterator node is atomic.** A failure at row 900 replays from row 0; rows already sent are discarded, never resumed.
+
+Laziness on its own does not bound what the node holds. Declare `Transfer{MaxOutputMB: ...}` for that: it is what asks the platform for a multipart upload, which is what lets parts leave as they fill instead of the whole output being buffered for a single request.
+
+```go
+wf.Node(exportAll, authoring.NodeOptions{
+	Transfer: &authoring.Transfer{MaxOutputMB: 4096},
+})
+```
+
+Without it a large output is refused rather than truncated, naming `max_output_mb` as the remedy.
 
 To decide routing from what was streamed, write through `ctx.OutputStream`:
 
