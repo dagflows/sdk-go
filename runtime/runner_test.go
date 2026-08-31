@@ -89,7 +89,7 @@ func TestAHandlerReadsItsInputAndReturnsAValue(t *testing.T) {
 
 func TestRoutingAndStopReachTheEnvelope(t *testing.T) {
 	result := node(t, func(*Ctx, *Inputs) (any, error) {
-		return Result{
+		return Result[any]{
 			Output: map[string]any{"ok": true},
 			Next:   []string{"notify"},
 		}, nil
@@ -99,7 +99,7 @@ func TestRoutingAndStopReachTheEnvelope(t *testing.T) {
 	require.NotContains(t, result, "stop")
 
 	halting := node(t, func(*Ctx, *Inputs) (any, error) {
-		return &Result{
+		return &Result[any]{
 			Output: map[string]any{},
 			Stop:   true,
 		}, nil
@@ -223,7 +223,7 @@ func TestTheRunSuppliedThresholdIsUsed(t *testing.T) {
 
 func TestAStreamedResultInlinesWhenItIsSmall(t *testing.T) {
 	result := node(t, func(*Ctx, *Inputs) (any, error) {
-		return Result{
+		return Result[any]{
 			Output: iter.Seq[any](lazy(map[string]any{"id": 1}, map[string]any{"id": 2})),
 		}, nil
 	}, nil, nil)

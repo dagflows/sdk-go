@@ -5,14 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	dagflows "github.com/dagflows/sdk-go"
-	"github.com/dagflows/sdk-go/authoring"
-	"github.com/dagflows/sdk-go/failure"
-	"github.com/dagflows/sdk-go/runtime"
+	df "github.com/dagflows/sdk-go"
 )
 
 // count counts records received from the seed parent input.
-func count(_ *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
+func count(_ *df.Ctx, inputs *df.Inputs) (map[string]any, error) {
 	fmt.Println("working")
 
 	seed, err := inputs.Get("seed")
@@ -34,7 +31,7 @@ func count(_ *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
 }
 
 // compute performs arithmetic multiplication on the seed factor input.
-func compute(_ *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
+func compute(_ *df.Ctx, inputs *df.Inputs) (map[string]any, error) {
 	seed, err := inputs.Get("seed")
 	if err != nil {
 		return nil, err
@@ -53,37 +50,39 @@ func compute(_ *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
 	return map[string]any{"value": 14 * factor}, nil
 }
 
+type exported = df.Result[*df.Written]
+
 // export streams processed rows to the output writer and determines next-hop routing.
-func export(ctx *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
+func export(ctx *df.Ctx, inputs *df.Inputs) (exported, error) {
 	seed, err := inputs.One()
 	if err != nil {
-		return nil, err
+		return exported{}, err
 	}
 
-	out := ctx.OutputStream(runtime.NDJSON)
+	out := ctx.Out(df.NDJSON)
 	defer out.Abort()
 
 	written := 0
 
 	for row, err := range seed.Iter() {
 		if err != nil {
-			return nil, err
+			return exported{}, err
 		}
 
 		if err := out.Write(row); err != nil {
-			return nil, err
+			return exported{}, err
 		}
 
 		written++
 	}
 
 	if err := out.Close(); err != nil {
-		return nil, err
+		return exported{}, err
 	}
 
 	ref, err := out.Ref()
 	if err != nil {
-		return nil, err
+		return exported{}, err
 	}
 
 	next := "process"
@@ -91,64 +90,94 @@ func export(ctx *runtime.Ctx, inputs *runtime.Inputs) (any, error) {
 		next = "empty"
 	}
 
-	return runtime.Result{
+	return exported{
 		Output: ref,
 		Next:   []string{next},
 	}, nil
 }
 
-func fails(*runtime.Ctx, *runtime.Inputs) (any, error) {
-	return nil, &failure.Fail{
+func fails(*df.Ctx, df.None) (any, error) {
+	return nil, &df.Fail{
 		Message:  "upstream returned 503",
-		Category: failure.INFRASTRUCTURE,
+		Category: df.INFRASTRUCTURE,
 		Abort:    new(false),
 	}
 }
 
-func crashes(*runtime.Ctx, *runtime.Inputs) (any, error) {
+func crashes(*df.Ctx, df.None) (any, error) {
 	var rows []int
 
 	return rows[3], nil
 }
 
-func version(*runtime.Ctx, *runtime.Inputs) (any, error) {
+func version(*df.Ctx, df.None) (map[string]any, error) {
 	return map[string]any{
-		"sdk": dagflows.Version(),
+		"sdk": df.Version(),
 	}, nil
 }
 
+// The typed pair: a child's input type is its parent's output type, and the
+// platform decodes the parent into it before the handler runs.
+type Order struct {
+	ID     int64 `json:"id"`
+	Amount int64 `json:"amount"`
+}
+
+type Orders struct {
+	Orders []Order `json:"orders"`
+}
+
+type Totals struct {
+	Total int64 `json:"total"`
+}
+
+func fetchOrders(*df.Ctx, df.None) (Orders, error) {
+	return Orders{Orders: []Order{{ID: 1, Amount: 100}, {ID: 2, Amount: 250}}}, nil
+}
+
+func total(_ *df.Ctx, orders Orders) (Totals, error) {
+	var sum int64
+
+	for _, order := range orders.Orders {
+		sum += order.Amount
+	}
+
+	return Totals{Total: sum}, nil
+}
+
 func main() {
-	wf := authoring.NewWorkflow("demo", authoring.WorkflowOptions{
-		Version:            "1.26",
+	wf := df.NewWorkflow("demo", df.WorkflowOptions{
+		Version:            "1.27",
 		MaxConcurrentNodes: 5,
 	})
 
-	counted := wf.Node(count, authoring.NodeOptions{
-		Execution: &authoring.Execution{
+	counted := wf.Node(count, df.Depends(), df.NodeOptions{
+		Execution: &df.Execution{
 			Machine: "m",
 		},
 	})
-	computed := wf.Node(compute, authoring.NodeOptions{
-		Depends: []*authoring.NodeRef{counted},
-		Execution: &authoring.Execution{
+	computed := wf.Node(compute, df.Depends(counted), df.NodeOptions{
+		Execution: &df.Execution{
 			Machine:     "m",
 			TimeoutSecs: 30,
 		},
-		Retry: &authoring.Retry{
+		Retry: &df.Retry{
 			MaxAttempts: new(2),
-			RetryOn:     []authoring.RetryCategory{authoring.RetryOnInfrastructure, authoring.RetryOnTimeout},
+			RetryOn:     []df.RetryCategory{df.RetryOnInfrastructure, df.RetryOnTimeout},
 		},
 	})
-	wf.Node(export, authoring.NodeOptions{
-		Key:     "report",
-		Depends: []*authoring.NodeRef{computed, wf.ExternalNode("crunch")},
-		Transfer: &authoring.Transfer{
+	wf.NodeResult(export, df.Depends(computed, wf.ExternalNode("crunch")), df.NodeOptions{
+		Key: "report",
+		Transfer: &df.Transfer{
 			MaxOutputMB: 64,
 		},
 	})
-	wf.Node(fails, authoring.NodeOptions{})
-	wf.Node(crashes, authoring.NodeOptions{})
-	wf.Node(version, authoring.NodeOptions{})
+	wf.Node(fails, df.Root)
+	wf.Node(crashes, df.Root)
+	wf.Node(version, df.Root)
 
-	dagflows.Main()
+	fetched := wf.Node(fetchOrders, df.Root, df.NodeOptions{Key: "fetch_orders"})
+	wf.Node(total, fetched)
+
+	df.Main()
 }

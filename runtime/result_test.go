@@ -77,12 +77,12 @@ func TestAMapShapedLikeAnEnvelopeIsStillData(t *testing.T) {
 }
 
 func TestRoutingIsCarriedAsAList(t *testing.T) {
-	require.Equal(t, []string{"notify"}, envelope(t, Result{Output: map[string]any{}, Next: []string{"notify"}}, big).Next)
-	require.Equal(t, []string{"a", "b"}, envelope(t, &Result{Output: map[string]any{}, Next: []string{"a", "b"}}, big).Next)
+	require.Equal(t, []string{"notify"}, envelope(t, Result[any]{Output: map[string]any{}, Next: []string{"notify"}}, big).Next)
+	require.Equal(t, []string{"a", "b"}, envelope(t, &Result[any]{Output: map[string]any{}, Next: []string{"a", "b"}}, big).Next)
 }
 
 func TestAbsentRoutingMeansEveryChild(t *testing.T) {
-	require.NotContains(t, wire(t, envelope(t, Result{Output: map[string]any{}}, big)), "next")
+	require.NotContains(t, wire(t, envelope(t, Result[any]{Output: map[string]any{}}, big)), "next")
 
 	next, err := normaliseNext(nil)
 	require.NoError(t, err)
@@ -90,16 +90,16 @@ func TestAbsentRoutingMeansEveryChild(t *testing.T) {
 }
 
 func TestABlankRoutingKeyIsRefused(t *testing.T) {
-	_, err := ToEnvelope(Result{Output: map[string]any{}, Next: []string{""}}, big, nil, 0, nil)
+	_, err := ToEnvelope(Result[any]{Output: map[string]any{}, Next: []string{""}}, big, nil, 0, nil)
 	require.ErrorContains(t, err, "Stop: true")
 
-	_, err = ToEnvelope(Result{Output: map[string]any{}, Next: []string{"ok", "  "}}, big, nil, 0, nil)
+	_, err = ToEnvelope(Result[any]{Output: map[string]any{}, Next: []string{"ok", "  "}}, big, nil, 0, nil)
 	require.ErrorContains(t, err, "Stop: true")
 }
 
 func TestStopIsCarriedAndNeverInferred(t *testing.T) {
-	require.Equal(t, true, wire(t, envelope(t, Result{Output: map[string]any{}, Stop: true}, big))["stop"])
-	require.NotContains(t, wire(t, envelope(t, Result{Output: map[string]any{}, Next: []string{}}, big)), "stop")
+	require.Equal(t, true, wire(t, envelope(t, Result[any]{Output: map[string]any{}, Stop: true}, big))["stop"])
+	require.NotContains(t, wire(t, envelope(t, Result[any]{Output: map[string]any{}, Next: []string{}}, big)), "stop")
 }
 
 func TestAContainerIsAValueAndALazyIteratorIsRows(t *testing.T) {
@@ -152,29 +152,29 @@ func TestATypedIteratorErrorFailsTheNode(t *testing.T) {
 }
 
 func TestAnInlineSequenceTravelsAsAJSONArray(t *testing.T) {
-	out := envelope(t, Result{Output: []any{map[string]any{"id": 1}}, ContentType: NDJSON}, big).Output
+	out := envelope(t, Result[any]{Output: []any{map[string]any{"id": 1}}, ContentType: NDJSON}, big).Output
 	require.Equal(t, NDJSON, out.ContentType)
 	require.Equal(t, []any{map[string]any{"id": 1}}, out.Data)
 }
 
 func TestAStatedRowTypeMakesAListRows(t *testing.T) {
-	out := envelope(t, Result{Output: []map[string]any{{"a": 1}}, ContentType: CSV}, big).Output
+	out := envelope(t, Result[any]{Output: []map[string]any{{"a": 1}}, ContentType: CSV}, big).Output
 	require.Equal(t, CSV, out.ContentType)
 	require.Equal(t, []any{map[string]any{"a": 1}}, out.Data)
 }
 
 func TestASingleValueWithARowTypeIsOneRow(t *testing.T) {
-	out := envelope(t, Result{Output: map[string]any{"a": 1}, ContentType: NDJSON}, big).Output
+	out := envelope(t, Result[any]{Output: map[string]any{"a": 1}, ContentType: NDJSON}, big).Output
 	require.Equal(t, []any{map[string]any{"a": 1}}, out.Data)
 }
 
 func TestALazyIteratorCannotBeAJSONValue(t *testing.T) {
-	_, err := ToEnvelope(Result{Output: lazy(1, 2), ContentType: JSON}, big, nil, 0, nil)
+	_, err := ToEnvelope(Result[any]{Output: lazy(1, 2), ContentType: JSON}, big, nil, 0, nil)
 	require.ErrorContains(t, err, "materialise it with slices.Collect")
 }
 
 func TestTextTravelsAsAString(t *testing.T) {
-	require.Equal(t, "42", envelope(t, Result{Output: 42, ContentType: TEXT}, big).Output.Data)
+	require.Equal(t, "42", envelope(t, Result[any]{Output: 42, ContentType: TEXT}, big).Output.Data)
 }
 
 func TestRawBytesMustBeUploaded(t *testing.T) {
@@ -182,17 +182,17 @@ func TestRawBytesMustBeUploaded(t *testing.T) {
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 	require.ErrorContains(t, err, "cannot travel in the JSON envelope")
 
-	_, err = ToEnvelope(Result{Output: []byte{0, 1}, ContentType: NDJSON}, big, nil, 0, nil)
+	_, err = ToEnvelope(Result[any]{Output: []byte{0, 1}, ContentType: NDJSON}, big, nil, 0, nil)
 	require.ErrorContains(t, err, "cannot travel in the JSON envelope")
 }
 
 func TestNoOutputIsAnEmptyObject(t *testing.T) {
 	require.Equal(t, map[string]any{}, envelope(t, nil, big).Output.Data)
-	require.Equal(t, map[string]any{}, envelope(t, (*Result)(nil), big).Output.Data)
+	require.Equal(t, map[string]any{}, envelope(t, (*Result[any])(nil), big).Output.Data)
 	require.Equal(
 		t,
 		`{"status":"SUCCESS","output":{"type":"INLINE","content_type":"application/json","data":{}}}`,
-		string(must(compact(envelope(t, Result{}, big)))),
+		string(must(compact(envelope(t, Result[any]{}, big)))),
 	)
 }
 
@@ -277,7 +277,7 @@ func TestRowCollectionCountsTheArrayPunctuation(t *testing.T) {
 }
 
 func TestEnvelopeKeysAreInWireOrder(t *testing.T) {
-	env := envelope(t, Result{Output: map[string]any{"n": 1}, Next: []string{"a"}, Stop: true}, big)
+	env := envelope(t, Result[any]{Output: map[string]any{"n": 1}, Next: []string{"a"}, Stop: true}, big)
 	require.Equal(
 		t,
 		`{"status":"SUCCESS","output":{"type":"INLINE","content_type":"application/json","data":{"n":1}},"next":["a"],"stop":true}`,
@@ -356,7 +356,7 @@ func must[T any](v T, err error) T {
 // is flattened into an ordinary row carrying output/next/stop/meta as fields.
 func TestAResultInTheRowPositionIsRefusedFromASequence(t *testing.T) {
 	_, err := ToEnvelope(
-		Result{Output: []any{Result{Output: map[string]any{"id": 1}}}, ContentType: NDJSON},
+		Result[any]{Output: []any{Result[any]{Output: map[string]any{"id": 1}}}, ContentType: NDJSON},
 		1<<20, nil, 0, nil,
 	)
 
@@ -365,17 +365,17 @@ func TestAResultInTheRowPositionIsRefusedFromASequence(t *testing.T) {
 
 func TestAResultInTheRowPositionIsRefusedFromAnIterator(t *testing.T) {
 	rows := iter.Seq[any](func(yield func(any) bool) {
-		yield(&Result{Output: map[string]any{"id": 1}, Next: []string{"b"}})
+		yield(&Result[any]{Output: map[string]any{"id": 1}, Next: []string{"b"}})
 	})
 
-	_, err := ToEnvelope(Result{Output: rows, ContentType: NDJSON}, 1<<20, nil, 0, nil)
+	_, err := ToEnvelope(Result[any]{Output: rows, ContentType: NDJSON}, 1<<20, nil, 0, nil)
 
 	require.ErrorContains(t, err, "Per-row routing is not supported yet")
 }
 
 func TestTheReturnedResultItselfIsLeftAlone(t *testing.T) {
 	envelope, err := ToEnvelope(
-		Result{Output: []any{map[string]any{"id": 1}}, ContentType: NDJSON, Next: []string{"b"}},
+		Result[any]{Output: []any{map[string]any{"id": 1}}, ContentType: NDJSON, Next: []string{"b"}},
 		1<<20, nil, 0, nil,
 	)
 

@@ -81,8 +81,8 @@ func itoa(n int) string {
 	return strconv.Itoa(n)
 }
 
-func inline(data any, contentType ContentType) *Input {
-	return &Input{
+func inline(data any, contentType ContentType) *Input[any] {
+	return &Input[any]{
 		key: "x",
 		entry: map[string]any{
 			"type":         INLINE,
@@ -92,8 +92,8 @@ func inline(data any, contentType ContentType) *Input {
 	}
 }
 
-func reference(base, path string, contentType ContentType, size int64, memoryLimitMB int) *Input {
-	return &Input{
+func reference(base, path string, contentType ContentType, size int64, memoryLimitMB int) *Input[any] {
+	return &Input[any]{
 		key: "x",
 		entry: map[string]any{
 			"type":         REFERENCE,
@@ -180,7 +180,7 @@ func TestBinaryHasNoRecordsAndSaysSo(t *testing.T) {
 	require.Contains(t, err.Error(), "not JSON; read it with .bytes()")
 }
 
-func readBytes(t *testing.T, handle *Input) []byte {
+func readBytes(t *testing.T, handle *Input[any]) []byte {
 	t.Helper()
 
 	body, err := handle.Bytes()
@@ -316,7 +316,7 @@ func TestAMissingReferenceIsAnInfrastructureFailure(t *testing.T) {
 // A node keeps the SDK it was baked with, so it will meet input types added to
 // the platform after it shipped. Reading one as inline would hand the handler a
 // missing data field and report success on nothing.
-func unknownBlockType(t *testing.T) *Input {
+func unknownBlockType(t *testing.T) *Input[any] {
 	t.Helper()
 
 	return mustGet(t, NewInputs(map[string]any{

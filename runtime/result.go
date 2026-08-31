@@ -8,23 +8,55 @@ import (
 	"strings"
 )
 
-// Result holds a node output, content type, routing instructions, and optional metadata.
-type Result struct {
-	Output      any
+// Result is a node's output, its content type, its routing and its metadata.
+//
+// Next names the children to run; absent means every child, and Stop halts
+// the branch. Meta is stored with the attempt for whoever reads the run later.
+type Result[T any] struct {
+	Output      T
 	ContentType ContentType
 	Next        []string
 	Stop        bool
-
-	// Meta holds user-defined node execution metadata for platforms supporting metadata ingestion.
-	Meta map[string]any
+	Meta        map[string]any
 }
 
-// Upload specifies the target destination for offloading large payloads.
+// resultParts is a Result with its payload erased, so the envelope builder
+// can take any instantiation.
+type resultParts struct {
+	output      any
+	contentType ContentType
+	next        []string
+	stop        bool
+	meta        map[string]any
+}
+
+type resultLike interface {
+	parts() resultParts
+}
+
+func (r Result[T]) parts() resultParts {
+	return resultParts{
+		output:      r.Output,
+		contentType: r.ContentType,
+		next:        r.Next,
+		stop:        r.Stop,
+		meta:        r.Meta,
+	}
+}
+
+// IsResult reports whether value is a Result of any payload type.
+func IsResult(value any) bool {
+	_, ok := value.(resultLike)
+	return ok
+}
+
+// Upload is the presigned upload target for offloading large outputs.
 type Upload struct {
 	URL string
 	Key string
 }
 
+// Offered reports whether this run was given somewhere to upload.
 func (u *Upload) Offered() bool {
 	return u != nil && u.URL != "" && u.Key != ""
 }
@@ -45,10 +77,11 @@ type Block struct {
 
 // Envelope represents the top-level success payload written to DAGFLOWS_OUTPUT.
 type Envelope struct {
-	Status string   `json:"status"`
-	Output *Block   `json:"output"`
-	Next   []string `json:"next,omitempty"`
-	Stop   bool     `json:"stop,omitempty"`
+	Status string         `json:"status"`
+	Output *Block         `json:"output"`
+	Next   []string       `json:"next,omitempty"`
+	Stop   bool           `json:"stop,omitempty"`
+	Meta   map[string]any `json:"meta,omitempty"`
 }
 
 // bufferBudget defines the fraction of node memory allowed for buffering records in RAM.
@@ -65,7 +98,8 @@ func normaliseNext(next []string) ([]string, error) {
 	return next, nil
 }
 
-// lazyRows adapts iterator functions to the standard runtime rows iterator.
+// lazyRows converts an iterator value into the runtime's rows iterator,
+// reporting whether the value was one.
 func lazyRows(output any) (rows, bool) {
 	switch v := output.(type) {
 	case nil:
@@ -89,7 +123,8 @@ func lazyRows(output any) (rows, bool) {
 
 var errorType = reflect.TypeFor[error]()
 
-// reflectRows dynamically adapts functions matching iterator signatures using reflection.
+// reflectRows converts a function with an iter.Seq or iter.Seq2 shape into rows,
+// using reflection for the element types this package cannot name.
 func reflectRows(fn reflect.Value) (rows, bool) {
 	kind := fn.Type()
 	if kind.Kind() != reflect.Func || kind.NumIn() != 1 || kind.NumOut() != 0 || kind.IsVariadic() {
@@ -121,7 +156,8 @@ func reflectRows(fn reflect.Value) (rows, bool) {
 	}, true
 }
 
-// inferContentType determines the MIME type, prioritizing explicit content types.
+// inferContentType determines an output's content type, preferring the one the
+// handler stated.
 func inferContentType(output any, stated ContentType) ContentType {
 	if stated != "" {
 		return stated
@@ -196,7 +232,8 @@ func payload(output any, contentType ContentType) (any, error) {
 	return output, nil
 }
 
-// bufferCap computes maximum allowed bytes for memory buffering before forcing a spill or error.
+// bufferCap determines how many encoded bytes may be buffered before the output
+// spills to a multipart upload or is refused.
 func bufferCap(limit int64, upload *Upload, memoryLimitMB int) int64 {
 	if upload.Offered() && memoryLimitMB > 0 {
 		heap := float64(memoryLimitMB) * 1024 * 1024 * bufferBudget
@@ -261,7 +298,8 @@ func buildBlock(data any, contentType ContentType, limit int64, upload *Upload) 
 	}, nil
 }
 
-// RowSink accumulates streaming records, inlining, uploading in single PUT, or spilling to multipart.
+// RowSink collects output rows, inlining them, uploading them in a single PUT,
+// or spilling to a multipart upload once they exceed the limits.
 type RowSink struct {
 	contentType ContentType
 	limit       int64
@@ -276,6 +314,7 @@ type RowSink struct {
 	uploader  *PartUploader
 }
 
+// NewRowSink returns a sink that buffers rows up to limit and refuses beyond cap.
 func NewRowSink(contentType ContentType, limit, cap int64, upload *Upload, multipart *Multipart) *RowSink {
 	return &RowSink{
 		contentType: contentType,
@@ -294,8 +333,7 @@ func NewRowSink(contentType ContentType, limit, cap int64, upload *Upload, multi
 // is the shape per-record routing will want, so the slot stays reserved rather
 // than taken by an accident nodes could come to depend on.
 func refuseResultRow(row any) error {
-	switch row.(type) {
-	case Result, *Result:
+	if IsResult(row) {
 		return errors.New(
 			"a row cannot be a Result; yield the row itself, and set Next on the Result the handler returns. Per-row routing is not supported yet",
 		)
@@ -304,6 +342,9 @@ func refuseResultRow(row any) error {
 	return nil
 }
 
+// Add measures and buffers one row, spilling to the multipart upload once the
+// running total passes the inline limit, and refusing the output when it passes
+// what this node can hold in memory.
 func (s *RowSink) Add(row any) error {
 	if err := refuseResultRow(row); err != nil {
 		return err
@@ -385,6 +426,8 @@ func (s *RowSink) Abort() {
 	}
 }
 
+// spill switches from the in-memory buffer to a streaming multipart upload,
+// re-encoding the rows collected so far.
 func (s *RowSink) spill() error {
 	s.encoder = NewRowEncoder(s.contentType)
 	s.uploader = NewPartUploader(s.multipart, s.contentType)
@@ -434,19 +477,16 @@ func streamRows(output rows, contentType ContentType, limit, cap int64, upload *
 
 // ToEnvelope formats the handler return value into a success envelope.
 func ToEnvelope(value any, inlineMaxBytes int, upload *Upload, memoryLimitMB int, multipart *Multipart) (*Envelope, error) {
-	var result Result
+	var result resultParts
 
-	switch v := value.(type) {
-	case Result:
-		result = v
-
-	case *Result:
-		if v != nil {
-			result = *v
-		}
-
+	switch r, ok := value.(resultLike); {
+	case ok && isNilPointer(value):
+		// A nil *Result is no output, not a null payload.
+		result = resultParts{}
+	case ok:
+		result = r.parts()
 	default:
-		result = Result{Output: value}
+		result = resultParts{output: value}
 	}
 
 	limit := int64(inlineMaxBytes)
@@ -457,24 +497,24 @@ func ToEnvelope(value any, inlineMaxBytes int, upload *Upload, memoryLimitMB int
 	var block *Block
 	var err error
 
-	if written, ok := result.Output.(*Written); ok && written != nil {
+	if written, ok := result.output.(*Written); ok && written != nil {
 		block = written.block
 	} else {
-		contentType := inferContentType(result.Output, result.ContentType)
+		contentType := inferContentType(result.output, result.contentType)
 		cap := bufferCap(limit, upload, memoryLimitMB)
 
 		switch {
-		case isRows(contentType) && isSequence(result.Output):
-			block, err = streamRows(sequenceRows(result.Output), contentType, limit, cap, upload, multipart)
+		case isRows(contentType) && isSequence(result.output):
+			block, err = streamRows(sequenceRows(result.output), contentType, limit, cap, upload, multipart)
 
-		case isRows(contentType) && isLazy(result.Output):
-			lazy, _ := lazyRows(result.Output)
+		case isRows(contentType) && isLazy(result.output):
+			lazy, _ := lazyRows(result.output)
 			block, err = streamRows(lazy, contentType, limit, cap, upload, multipart)
 
 		default:
 			var data any
 
-			data, err = payload(result.Output, contentType)
+			data, err = payload(result.output, contentType)
 			if err == nil {
 				block, err = buildBlock(data, contentType, limit, upload)
 			}
@@ -485,19 +525,31 @@ func ToEnvelope(value any, inlineMaxBytes int, upload *Upload, memoryLimitMB int
 		}
 	}
 
-	next, err := normaliseNext(result.Next)
+	next, err := normaliseNext(result.next)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Envelope{
+	envelope := &Envelope{
 		Status: "SUCCESS",
 		Output: block,
 		Next:   next,
-		Stop:   result.Stop,
-	}, nil
+		Stop:   result.stop,
+	}
+	if len(result.meta) > 0 {
+		envelope.Meta = result.meta
+	}
+
+	return envelope, nil
 }
 
+// isNilPointer reports whether value is a nil pointer.
+func isNilPointer(value any) bool {
+	v := reflect.ValueOf(value)
+	return v.Kind() == reflect.Pointer && v.IsNil()
+}
+
+// isLazy reports whether output is an iterator rather than a materialised value.
 func isLazy(output any) bool {
 	_, ok := lazyRows(output)
 

@@ -36,14 +36,19 @@ func TestMain(m *testing.M) {
 }
 
 func buildModule(dir, name string) string {
+	return buildIn(dir, filepath.Join("testdata", name), name)
+}
+
+// buildIn compiles the module at source into dir, as the builder would.
+func buildIn(dir, source, name string) string {
 	out := filepath.Join(dir, name+exeSuffix())
 
 	build := exec.Command("go", "build", "-o", out, ".")
-	build.Dir = filepath.Join("testdata", name)
+	build.Dir = source
 	build.Env = append(os.Environ(), "GOWORK=off")
 
 	if output, err := build.CombinedOutput(); err != nil {
-		panic(fmt.Sprintf("building testdata/%s: %v\n%s", name, err, output))
+		panic(fmt.Sprintf("building %s: %v\n%s", source, err, output))
 	}
 
 	return out
@@ -308,11 +313,11 @@ func TestTheManifestCommandWritesWhatTheBuilderReads(t *testing.T) {
 	dir := project(t)
 	result := cli(t, dir, "build", "manifest")
 	require.Equal(t, 0, result.code, result.stderr)
-	require.Contains(t, result.stdout, "wrote dagflows-manifest.json with 6 node(s)")
+	require.Contains(t, result.stdout, "wrote dagflows-manifest.json with 8 node(s)")
 
 	manifest := readJSON(t, filepath.Join(dir, "dagflows-manifest.json"))
 	require.Equal(t, float64(1), manifest["v"])
-	require.Equal(t, map[string]any{"language": "go", "version": "1.26"}, manifest["runtime"])
+	require.Equal(t, map[string]any{"language": "go", "version": "1.27"}, manifest["runtime"])
 	require.Equal(t, "demo", manifest["workflow"].(map[string]any)["name"])
 
 	nodes := map[string]map[string]any{}
@@ -342,19 +347,19 @@ func TestTheManifestCommandAnswersInJSON(t *testing.T) {
 	payload := parseJSON(t, result.stdout)
 	require.Equal(t, true, payload["ok"])
 	require.Equal(t, "dagflows-manifest.json", payload["path"])
-	require.Equal(t, []any{"count", "compute", "report", "fails", "crashes", "version"}, payload["nodes"])
+	require.Equal(t, []any{"count", "compute", "report", "fails", "crashes", "version", "fetch_orders", "total"}, payload["nodes"])
 }
 
 func TestValidateWritesNothing(t *testing.T) {
 	dir := project(t)
 	result := cli(t, dir, "build", "validate")
 	require.Equal(t, 0, result.code, result.stderr)
-	require.Contains(t, result.stdout, "workflow 'demo' is valid: 6 node(s) - count, compute, report, fails, crashes, version")
+	require.Contains(t, result.stdout, "workflow 'demo' is valid: 8 node(s) - count, compute, report, fails, crashes, version, fetch_orders, total")
 	require.NoFileExists(t, filepath.Join(dir, "dagflows-manifest.json"))
 
 	asJSON := parseJSON(t, cli(t, dir, "build", "validate", "--json").stdout)
 	require.Equal(t, true, asJSON["ok"])
-	require.Equal(t, map[string]any{"language": "go", "version": "1.26"}, asJSON["runtime"])
+	require.Equal(t, map[string]any{"language": "go", "version": "1.27"}, asJSON["runtime"])
 }
 
 func TestABinaryDeclaringNoWorkflowIsReported(t *testing.T) {
@@ -432,12 +437,12 @@ func TestCheckNamesTheNodeThatWasRemoved(t *testing.T) {
 	cli(t, dir, "build", "manifest")
 
 	staleManifest(t, dir, func(manifest map[string]any) {
-		manifest["nodes"] = manifest["nodes"].([]any)[:5]
+		manifest["nodes"] = manifest["nodes"].([]any)[:7]
 	})
 
 	result := cli(t, dir, "build", "manifest", "--check")
 	require.Equal(t, 1, result.code)
-	require.Contains(t, result.stderr, "node 'version' was added")
+	require.Contains(t, result.stderr, "node 'total' was added")
 	require.Contains(t, result.stderr, "build manifest")
 }
 
@@ -460,7 +465,7 @@ func TestCheckNamesRuntimeAndWorkflowDrift(t *testing.T) {
 	cli(t, dir, "build", "manifest")
 
 	staleManifest(t, dir, func(manifest map[string]any) {
-		manifest["runtime"].(map[string]any)["version"] = "1.25"
+		manifest["runtime"].(map[string]any)["version"] = "1.26"
 		manifest["workflow"].(map[string]any)["max_concurrent_nodes"] = 1
 		manifest["nodes"] = append(manifest["nodes"].([]any), map[string]any{"key": "ghost", "entrypoint": "app"})
 	})
@@ -471,7 +476,7 @@ func TestCheckNamesRuntimeAndWorkflowDrift(t *testing.T) {
 	payload := parseJSON(t, result.stdout)
 	require.Equal(t, []any{
 		"node 'ghost' was removed",
-		"runtime changed: map[language:go version:1.25] -> map[language:go version:1.26]",
+		"runtime changed: map[language:go version:1.26] -> map[language:go version:1.27]",
 		"workflow settings changed",
 	}, payload["drift"])
 }
@@ -494,7 +499,7 @@ func TestCheckReportsDriftAsJSON(t *testing.T) {
 	cli(t, dir, "build", "manifest")
 
 	staleManifest(t, dir, func(manifest map[string]any) {
-		manifest["nodes"] = manifest["nodes"].([]any)[:5]
+		manifest["nodes"] = manifest["nodes"].([]any)[:7]
 	})
 
 	result := cli(t, dir, "build", "manifest", "--check", "--json")
@@ -503,7 +508,7 @@ func TestCheckReportsDriftAsJSON(t *testing.T) {
 	payload := parseJSON(t, result.stdout)
 	require.Equal(t, false, payload["ok"])
 	require.Equal(t, true, payload["stale"])
-	require.Equal(t, []any{"node 'version' was added"}, payload["drift"])
+	require.Equal(t, []any{"node 'total' was added"}, payload["drift"])
 }
 
 func TestCheckRefusesAManifestThatIsNotJSON(t *testing.T) {
@@ -658,4 +663,55 @@ func TestAGracefulNodeFailureExitsZeroSoTheWorkerReadsTheEnvelope(t *testing.T) 
 	require.Equal(t, "FAILED", written["status"])
 	require.Equal(t, map[string]any{"message": "upstream returned 503", "category": "infrastructure"}, written["error"])
 	require.NotContains(t, written, "retry", "abort=false with no delay leaves retry to the policy")
+}
+
+func TestATypedNodeDecodesItsParentThroughDevRun(t *testing.T) {
+	dir := project(t)
+	write(t, dir, "orders.json", `{"orders": [{"id": 1, "amount": 100}, {"id": 2, "amount": 250}]}`)
+
+	result := cli(t, dir, "dev", "run", "total", "--input", "fetch_orders=orders.json")
+	require.Equal(t, 0, result.code, result.stderr)
+	require.Contains(t, result.stdout, `"total": 350`)
+}
+
+func TestAParentThatDoesNotFitTheTypeFailsNamingTheField(t *testing.T) {
+	result := cli(t, project(t), "dev", "run", "total", "--input", `fetch_orders={"orders": [{"id": "one", "amount": 100}]}`)
+	require.Equal(t, 1, result.code)
+	require.Contains(t, result.stderr, "FAILED (permanent)")
+	require.Contains(t, result.stderr, "fetch_orders")
+	require.Contains(t, result.stderr, "id")
+}
+
+func TestATypedNodeRunsThroughTheWorkerArgv(t *testing.T) {
+	envelope := computeEnvelope("total")
+	envelope["payload"].(map[string]any)["inputs"] = map[string]any{
+		"fetch_orders": map[string]any{
+			"type": "INLINE",
+			"data": map[string]any{"orders": []any{map[string]any{"id": 1, "amount": 100}, map[string]any{"id": 2, "amount": 250}}},
+		},
+	}
+
+	result, written := invoke(t, project(t), envelope)
+	require.Equal(t, 0, result.code, result.stderr)
+	require.Equal(t, "SUCCESS", written["status"])
+	require.Equal(t, map[string]any{"total": float64(350)}, written["output"].(map[string]any)["data"])
+}
+
+func TestTheManifestCarriesTheTypedContract(t *testing.T) {
+	dir := project(t)
+	cli(t, dir, "build", "manifest")
+
+	nodes := map[string]map[string]any{}
+	for _, raw := range readJSON(t, filepath.Join(dir, "dagflows-manifest.json"))["nodes"].([]any) {
+		node := raw.(map[string]any)
+		nodes[node["key"].(string)] = node
+	}
+
+	output := nodes["fetch_orders"]["io"].(map[string]any)["output"].(map[string]any)
+	require.Equal(t, "value", output["shape"])
+	require.Equal(t, "Orders", output["schema"].(map[string]any)["title"])
+
+	inputs := nodes["total"]["io"].(map[string]any)["inputs"].(map[string]any)
+	require.Equal(t, "Orders", inputs["fetch_orders"].(map[string]any)["schema"].(map[string]any)["title"])
+	require.Equal(t, []any{"fetch_orders"}, nodes["total"]["depends"])
 }

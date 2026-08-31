@@ -106,7 +106,7 @@ func tier3(t *testing.T, base string, output any, parts int) (*Envelope, error) 
 	t.Helper()
 
 	return ToEnvelope(
-		Result{
+		Result[any]{
 			Output:      output,
 			ContentType: NDJSON,
 		},
@@ -173,7 +173,7 @@ func TestCompletionNamesEveryPartWithItsOwnETag(t *testing.T) {
 func TestASmallOutputNeverOpensAnUpload(t *testing.T) {
 	base, store := newPartStore(t)
 	env, err := ToEnvelope(
-		Result{
+		Result[any]{
 			Output:      lazy(map[string]any{"id": 1}),
 			ContentType: NDJSON,
 		},
@@ -269,7 +269,7 @@ func TestTheWriterStreamsTheSameWay(t *testing.T) {
 		count++
 	}
 
-	block := envelope(t, Result{
+	block := envelope(t, Result[any]{
 		Output: closedRef(t, out),
 		Next:   []string{"done"},
 	}, 1024).Output

@@ -41,6 +41,11 @@ type Fail struct {
 
 	// Abort controls retry behavior. Nil defaults to false if RetryAfterMs is set, true otherwise.
 	Abort *bool
+
+	// Code is a stable machine readable name for the failure, and Details any
+	// JSON value that explains it; both travel in the envelope next to the message.
+	Code    string
+	Details any
 }
 
 func (f *Fail) Error() string {

@@ -80,7 +80,7 @@ func TestRoutingCanDependOnWhatWasWritten(t *testing.T) {
 		next = "empty"
 	}
 
-	env := envelope(t, Result{
+	env := envelope(t, Result[any]{
 		Output: closedRef(t, out),
 		Next:   []string{next},
 	}, big)
@@ -91,7 +91,7 @@ func TestRoutingCanDependOnWhatWasWritten(t *testing.T) {
 
 func TestAnEmptyStreamRoutesTheOtherWay(t *testing.T) {
 	out := streamCtx(big, "", "").OutputStream(NDJSON)
-	env := envelope(t, Result{
+	env := envelope(t, Result[any]{
 		Output: closedRef(t, out),
 		Next:   []string{"empty"},
 	}, big)
@@ -115,7 +115,7 @@ func TestALargeStreamIsUploadedAndTheNodeCannotTell(t *testing.T) {
 		require.NoError(t, out.Write(map[string]any{"id": index, "pad": strings.Repeat("x", 40)}))
 	}
 
-	block := envelope(t, Result{Output: closedRef(t, out)}, 64).Output
+	block := envelope(t, Result[any]{Output: closedRef(t, out)}, 64).Output
 	require.Equal(t, REFERENCE, block.Type)
 	require.Equal(t, "k", block.Ref)
 	require.Equal(t, 50, bytes.Count(store.body, []byte("\n")))
@@ -130,7 +130,7 @@ func TestASmallStreamStaysInline(t *testing.T) {
 	out := streamCtx(big, base+"/put", "k").OutputStream(NDJSON)
 
 	require.NoError(t, out.Write(map[string]any{"id": 1}))
-	require.Equal(t, INLINE, envelope(t, Result{Output: closedRef(t, out)}, big).Output.Type)
+	require.Equal(t, INLINE, envelope(t, Result[any]{Output: closedRef(t, out)}, big).Output.Type)
 	require.Zero(t, store.puts)
 }
 
@@ -209,7 +209,7 @@ func TestCSVFromTheWriterIsCSVWhenUploaded(t *testing.T) {
 	require.NoError(t, out.Write(map[string]any{"id": 1, "name": "ana"}))
 	require.NoError(t, out.Write(map[string]any{"id": 2, "name": "bo"}))
 
-	envelope(t, Result{Output: closedRef(t, out)}, 8)
+	envelope(t, Result[any]{Output: closedRef(t, out)}, 8)
 
 	require.Equal(t, CSV, store.contentType)
 	require.True(t, bytes.HasPrefix(store.body, []byte("id,name\r\n")), "%q", store.body)
@@ -218,5 +218,5 @@ func TestCSVFromTheWriterIsCSVWhenUploaded(t *testing.T) {
 func TestAZeroInlineLimitOnTheWriterTakesTheDefault(t *testing.T) {
 	out := (&Ctx{InlineMaxBytes: 0}).OutputStream(NDJSON)
 	require.NoError(t, out.Write(map[string]any{"id": 1}))
-	require.Equal(t, INLINE, envelope(t, Result{Output: closedRef(t, out)}, 0).Output.Type)
+	require.Equal(t, INLINE, envelope(t, Result[any]{Output: closedRef(t, out)}, 0).Output.Type)
 }

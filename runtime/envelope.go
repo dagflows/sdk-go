@@ -2,18 +2,52 @@ package runtime
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"iter"
+	"log/slog"
 	"maps"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
+	"sync"
 )
 
-// Ctx holds execution metadata for the node run. Raw preserves unmodeled platform fields.
+// RunInfo is which run and which node this is.
+type RunInfo struct {
+	WorkflowRunID  string
+	NodeKey        string
+	Attempt        int
+	Language       string
+	RuntimeVersion string
+}
+
+// Limits is what the platform allocated to this node.
+type Limits struct {
+	MemoryMB   int
+	MilliCores int
+	TimeoutMs  int64
+}
+
+// TriggerInfo is how an event-triggered run was started. The event itself is
+// an input, keyed by the trigger.
+type TriggerInfo struct {
+	Kind       string
+	ID         string
+	ReceivedAt string
+	Attributes map[string]any
+}
+
+// Ctx is the execution metadata for this node run.
+//
+// The exported fields are the wire's, and Raw preserves the platform fields
+// this SDK does not model. Run, Limits and Trigger group them, Context is the
+// cancellation signal, Log the console logger and Out the output writer. New
+// capabilities arrive as new accessors here, never as new handler parameters.
 type Ctx struct {
 	WorkflowRunID   string
 	NodeKey         string
@@ -35,7 +69,13 @@ type Ctx struct {
 	// never the whole transfer.
 	ConnTimeoutMs int64
 	IdleTimeoutMs int64
-	Raw           map[string]any
+	// Capabilities is what this platform offers beyond the base contract,
+	// such as "stream/v1".
+	Capabilities []string
+	Raw          map[string]any
+
+	background context.Context
+	cancel     context.CancelFunc
 }
 
 // CtxFromRaw parses the raw context map, applying fallback defaults for missing fields.
@@ -50,6 +90,15 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 	}
 
 	transfer, _ := raw["transfer"].(map[string]any)
+
+	var capabilities []string
+	if offered, ok := raw["capabilities"].([]any); ok {
+		for _, item := range offered {
+			capabilities = append(capabilities, Str(item))
+		}
+	}
+
+	background, cancel := context.WithCancel(context.Background())
 
 	return &Ctx{
 		WorkflowRunID:   Str(raw["workflow_run_id"]),
@@ -71,13 +120,82 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 		MaxOutputMB:   int64(Num(transfer["max_output_mb"], 0)),
 		ConnTimeoutMs: int64(Num(transfer["conn_timeout_ms"], DefaultConnTimeoutMs)),
 		IdleTimeoutMs: int64(Num(transfer["idle_timeout_ms"], DefaultIdleTimeoutMs)),
+		Capabilities:  capabilities,
 		Raw:           raw,
+		background:    background,
+		cancel:        cancel,
 	}
+}
+
+// Run returns which run and which node this is.
+func (c *Ctx) Run() RunInfo {
+	return RunInfo{
+		WorkflowRunID:  c.WorkflowRunID,
+		NodeKey:        c.NodeKey,
+		Attempt:        c.Attempt,
+		Language:       c.Language,
+		RuntimeVersion: c.RuntimeVersion,
+	}
+}
+
+// Limits returns what the platform allocated to this node.
+func (c *Ctx) Limits() Limits {
+	return Limits{MemoryMB: c.MemoryMB, MilliCores: c.MilliCores, TimeoutMs: c.TimeoutMs}
+}
+
+// Has reports whether the platform running this node offers a capability.
+func (c *Ctx) Has(capability string) bool {
+	return slices.Contains(c.Capabilities, capability)
+}
+
+// Trigger returns the delivery metadata of an event-triggered run, or nil when
+// the run was not event-triggered.
+func (c *Ctx) Trigger() *TriggerInfo {
+	raw, ok := c.Raw["trigger"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	attributes, _ := raw["attributes"].(map[string]any)
+
+	return &TriggerInfo{
+		Kind:       Str(raw["kind"]),
+		ID:         Str(raw["id"]),
+		ReceivedAt: Str(raw["received_at"]),
+		Attributes: attributes,
+	}
+}
+
+// Context returns the run's cancellation context. A handler that runs long
+// polls it, or hands it to whatever it calls.
+func (c *Ctx) Context() context.Context {
+	if c.background == nil {
+		return context.Background()
+	}
+	return c.background
+}
+
+var (
+	logOnce sync.Once
+	logger  *slog.Logger
+)
+
+// Log returns the node's logger. The console is the log path, so it writes to stdout.
+func (c *Ctx) Log() *slog.Logger {
+	logOnce.Do(func() {
+		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
+	})
+	return logger
 }
 
 // Multipart returns the presigned multipart upload configuration if available.
 func (c *Ctx) Multipart() *Multipart {
 	return multipartFromCtx(c.Raw["output_multipart"])
+}
+
+// Out returns the output writer, for a node that decides routing while it writes.
+func (c *Ctx) Out(contentType ContentType) *OutputStream {
+	return c.OutputStream(contentType)
 }
 
 // OutputStream creates a streaming writer for nodes that emit dynamic output.
@@ -133,25 +251,50 @@ func Str(value any) string {
 	return fmt.Sprint(value)
 }
 
-// Input represents an upstream node output, resolved on demand.
-type Input struct {
+// Input is a parent node's output, resolved lazily on demand and decoded into T.
+//
+// Reached through the parent's handle, Get(inputs, parent), T is what that node
+// declared it produces; reached through a key it is any.
+type Input[T any] struct {
 	key           string
 	entry         map[string]any
 	memoryLimitMB int
 	held          any
 	hasValue      bool
+	missing       error
 }
 
-func (in *Input) Key() string {
+// Typed returns the same input, decoded into T.
+func Typed[T any](in *Input[any]) *Input[T] {
+	return &Input[T]{
+		key:           in.key,
+		entry:         in.entry,
+		memoryLimitMB: in.memoryLimitMB,
+		held:          in.held,
+		hasValue:      in.hasValue,
+		missing:       in.missing,
+	}
+}
+
+// ValueType returns T, the type this handle decodes into. The manifest emitter
+// calls it by name through reflection, which is how a lazy handle states the
+// element type it expects of its parent.
+func (in *Input[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
+
+// Key returns the parent node key this input came from.
+func (in *Input[T]) Key() string {
 	return in.key
 }
 
-func (in *Input) URL() string {
+// URL returns where a reference block's payload is stored, empty for an inline block.
+func (in *Input[T]) URL() string {
 	return Str(in.entry["url"])
 }
 
 // Type returns the block type, defaulting to INLINE.
-func (in *Input) Type() string {
+func (in *Input[T]) Type() string {
 	if kind := Str(in.entry["type"]); kind != "" {
 		return kind
 	}
@@ -160,7 +303,7 @@ func (in *Input) Type() string {
 }
 
 // ContentType returns the payload content type, defaulting to JSON.
-func (in *Input) ContentType() ContentType {
+func (in *Input[T]) ContentType() ContentType {
 	if kind := Str(in.entry["content_type"]); kind != "" {
 		return kind
 	}
@@ -168,18 +311,23 @@ func (in *Input) ContentType() ContentType {
 	return JSON
 }
 
-func (in *Input) Size() int64 {
+// Size returns the payload size in bytes as the envelope states it, 0 when unstated.
+func (in *Input[T]) Size() int64 {
 	return Num(in.entry["size"], 0)
 }
 
-func (in *Input) isReference() bool {
+func (in *Input[T]) isReference() bool {
 	return in.Type() == REFERENCE
 }
 
 // refuseUnknownType rejects a block type this runtime does not know. Reading an
 // unknown type as inline would hand the handler the missing data field, so a
 // node baked against an older SDK would report success on nothing.
-func (in *Input) refuseUnknownType() error {
+func (in *Input[T]) refuseUnknownType() error {
+	if in.missing != nil {
+		return in.missing
+	}
+
 	kind := in.Type()
 	if kind == INLINE || kind == REFERENCE {
 		return nil
@@ -193,8 +341,24 @@ func (in *Input) refuseUnknownType() error {
 	}
 }
 
-// Value materializes the input. Refuses references that exceed memory limits before downloading.
-func (in *Input) Value() (any, error) {
+// Value materializes the input, decoded into T. Refuses references that
+// exceed memory limits before downloading.
+func (in *Input[T]) Value() (T, error) {
+	var zero T
+
+	raw, err := in.raw()
+	if err != nil {
+		return zero, err
+	}
+
+	if reflect.TypeFor[T]() == anyType {
+		return any(raw).(T), nil
+	}
+
+	return convert[T](raw, in.key)
+}
+
+func (in *Input[T]) raw() (any, error) {
 	if err := in.refuseUnknownType(); err != nil {
 		return nil, err
 	}
@@ -263,7 +427,7 @@ func (in *Input) Value() (any, error) {
 	return value, nil
 }
 
-func (in *Input) readAll() ([]byte, error) {
+func (in *Input[T]) readAll() ([]byte, error) {
 	body, err := in.Bytes()
 	if err != nil {
 		return nil, err
@@ -275,7 +439,7 @@ func (in *Input) readAll() ([]byte, error) {
 }
 
 // Bytes returns a stream reader for the raw payload.
-func (in *Input) Bytes() (io.ReadCloser, error) {
+func (in *Input[T]) Bytes() (io.ReadCloser, error) {
 	if err := in.refuseUnknownType(); err != nil {
 		return nil, err
 	}
@@ -298,8 +462,9 @@ func (in *Input) Bytes() (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(encoded)), nil
 }
 
-// Iter yields records from the input, streaming on-demand for references.
-func (in *Input) Iter() rows {
+// Iter yields records from the input as decoded JSON values, streaming
+// on-demand for references. Rows[E] on a handler's input is the typed form.
+func (in *Input[T]) Iter() rows {
 	return func(yield func(any, error) bool) {
 		if err := in.refuseUnknownType(); err != nil {
 			yield(nil, err)
@@ -350,8 +515,24 @@ func (in *Input) Iter() rows {
 	}
 }
 
+// Stream returns the input's records decoded into E, one at a time. It is the
+// typed counterpart of Iter for a handle to a rows parent.
+func Stream[E any, T any](in *Input[T]) Rows[E] {
+	return func(yield func(E, error) bool) {
+		for row, err := range in.Iter() {
+			var item E
+			if err == nil {
+				err = convertInto(row, &item, in.key)
+			}
+			if !yield(item, err) {
+				return
+			}
+		}
+	}
+}
+
 // records iterates an already materialized payload using stream rules.
-func (in *Input) records(stored any, kind ContentType, reference bool) rows {
+func (in *Input[T]) records(stored any, kind ContentType, reference bool) rows {
 	if isRows(kind) {
 		if list, ok := stored.([]any); ok {
 			return seqOf(list)
@@ -383,7 +564,9 @@ func seqOf(items []any) rows {
 	}
 }
 
-func (in *Input) refuseIfTooBig() error {
+// refuseIfTooBig refuses a reference whose decoded form would not fit the
+// node's memory budget, measured as its stated size times ParseExpansion.
+func (in *Input[T]) refuseIfTooBig() error {
 	budget := int64(in.memoryLimitMB) * 1024 * 1024
 
 	if budget > 0 && in.Size()*ParseExpansion > budget {
@@ -398,7 +581,7 @@ func (in *Input) refuseIfTooBig() error {
 	return nil
 }
 
-func (in *Input) String() string {
+func (in *Input[T]) String() string {
 	if in.isReference() {
 		return fmt.Sprintf("<Input '%s' REFERENCE %dB %s>", in.key, in.Size(), in.ContentType())
 	}
@@ -406,13 +589,14 @@ func (in *Input) String() string {
 	return fmt.Sprintf("<Input '%s' INLINE %s>", in.key, in.ContentType())
 }
 
-// Inputs contains parent node outputs, keyed by node name.
+// Inputs is the collection of parent node outputs, keyed by node key.
 type Inputs struct {
 	entries       map[string]map[string]any
 	memoryLimitMB int
 }
 
-// NewInputs wraps input entries with node memory limits.
+// NewInputs returns the parent collection for the envelope's input entries,
+// carrying the node's memory limit into every handle it hands out.
 func NewInputs(entries map[string]any, memoryLimitMB int) *Inputs {
 	in := &Inputs{
 		entries:       make(map[string]map[string]any, len(entries)),
@@ -431,14 +615,14 @@ func NewInputs(entries map[string]any, memoryLimitMB int) *Inputs {
 	return in
 }
 
-// Get returns the input handle for the given node key.
-func (in *Inputs) Get(key string) (*Input, error) {
+// Get returns the untyped input handle for the given node key.
+func (in *Inputs) Get(key string) (*Input[any], error) {
 	entry, ok := in.entries[key]
 	if !ok {
 		return nil, fmt.Errorf("no input named '%s', this node's parents are: %s", key, in.available())
 	}
 
-	return &Input{
+	return &Input[any]{
 		key:           key,
 		entry:         entry,
 		memoryLimitMB: in.memoryLimitMB,
@@ -446,7 +630,7 @@ func (in *Inputs) Get(key string) (*Input, error) {
 }
 
 // One returns the single input for nodes with exactly one parent.
-func (in *Inputs) One() (*Input, error) {
+func (in *Inputs) One() (*Input[any], error) {
 	if len(in.entries) != 1 {
 		return nil, fmt.Errorf("one() needs exactly one parent, this node has: %s", in.available())
 	}
@@ -458,6 +642,7 @@ func (in *Inputs) One() (*Input, error) {
 	return nil, errors.New("unreachable")
 }
 
+// Len returns how many parents this node has.
 func (in *Inputs) Len() int {
 	return len(in.entries)
 }
@@ -475,7 +660,8 @@ func (in *Inputs) available() string {
 	return strings.Join(slices.Sorted(maps.Keys(in.entries)), ", ")
 }
 
-// Load reads and parses the input envelope from the filesystem.
+// Load reads and parses the input envelope, defaulting to the path named by
+// DAGFLOWS_INPUT when none is given.
 func Load(path string) (*Ctx, *Inputs, error) {
 	if path == "" {
 		path = os.Getenv(InputEnv)

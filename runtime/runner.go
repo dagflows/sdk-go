@@ -21,6 +21,8 @@ type Failed struct {
 type FailureError struct {
 	Message  string          `json:"message"`
 	Category FailureCategory `json:"category"`
+	Code     string          `json:"code,omitempty"`
+	Details  any             `json:"details,omitempty"`
 }
 
 type Retry struct {
@@ -66,6 +68,8 @@ func Failure(err error) *Failed {
 		Error: FailureError{
 			Message:  bounded(fail.Message),
 			Category: fail.category(),
+			Code:     fail.Code,
+			Details:  fail.Details,
 		},
 	}
 

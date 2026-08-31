@@ -8,13 +8,19 @@ import (
 	"io"
 )
 
-// compactEncoder writes unescaped compact JSON without trailing newlines.
-// Reused across records to minimize encoder allocations.
+// compactEncoder writes the JSON profile every dagflows SDK shares.
+//
+// It uses compact separators with no extra whitespace, leaves HTML characters
+// unescaped so the bytes are the raw UTF-8 a reader in another language would
+// measure, rejects values JSON cannot represent such as NaN and infinity, and
+// strips the trailing newline encoding/json appends. One encoder is reused
+// across records to minimize allocations.
 type compactEncoder struct {
 	buf bytes.Buffer
 	enc *json.Encoder
 }
 
+// newCompactEncoder returns an encoder writing the shared JSON profile.
 func newCompactEncoder() *compactEncoder {
 	c := &compactEncoder{}
 	c.enc = json.NewEncoder(&c.buf)
@@ -35,7 +41,8 @@ func (c *compactEncoder) encode(value any) ([]byte, error) {
 	return bytes.TrimSuffix(c.buf.Bytes(), []byte{'\n'}), nil
 }
 
-// compact is the one-shot helper to encode a single value to compact JSON.
+// compact encodes a single value to compact JSON, returning bytes the caller
+// owns rather than a view of a reused buffer.
 func compact(value any) ([]byte, error) {
 	out, err := newCompactEncoder().encode(value)
 	if err != nil {
@@ -46,6 +53,9 @@ func compact(value any) ([]byte, error) {
 }
 
 // encodedLen returns the byte length of the value when encoded as compact JSON.
+//
+// Every size decision goes through here, so a running total and the final
+// inline check measure the same bytes.
 func encodedLen(enc *compactEncoder, value any) (int64, error) {
 	out, err := enc.encode(value)
 	if err != nil {

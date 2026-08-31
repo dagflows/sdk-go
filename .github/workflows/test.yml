@@ -22,8 +22,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The two newest Go releases, development happens on Windows too.
-        go: ["1.26.x", "stable"]
+        # 1.27 is the floor (generic methods); stable catches the next release early. Development happens on Windows too.
+        go: ["1.27.x", "stable"]
         os: [ubuntu-latest, windows-latest]
 
     steps:

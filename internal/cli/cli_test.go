@@ -12,15 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func handler(*runtime.Ctx, *runtime.Inputs) (any, error) {
+func handler(*runtime.Ctx, runtime.None) (map[string]any, error) {
 	return map[string]any{}, nil
 }
 
 func demo() *authoring.Workflow {
 	wf := authoring.NewWorkflow("demo", authoring.WorkflowOptions{
-		Version: "1.26",
+		Version: "1.27",
 	})
-	wf.Node(handler, authoring.NodeOptions{
+	wf.Node(handler, runtime.Root, authoring.NodeOptions{
 		Key: "extract",
 	})
 
@@ -71,7 +71,7 @@ func TestValidateAndManifestInProcess(t *testing.T) {
 
 	code, stdout, _ := run(t, []*authoring.Workflow{demo()}, "build", "validate", "--json")
 	require.Equal(t, OK, code)
-	require.Equal(t, "{\n  \"ok\": true,\n  \"nodes\": [\n    \"extract\"\n  ],\n  \"runtime\": {\n    \"language\": \"go\",\n    \"version\": \"1.26\"\n  }\n}\n", stdout)
+	require.Equal(t, "{\n  \"ok\": true,\n  \"nodes\": [\n    \"extract\"\n  ],\n  \"runtime\": {\n    \"language\": \"go\",\n    \"version\": \"1.27\"\n  }\n}\n", stdout)
 
 	code, stdout, _ = run(t, []*authoring.Workflow{demo()}, "build", "manifest", "-o", "out/m.json")
 	require.Equal(t, OK, code)

@@ -32,7 +32,7 @@ func inputsOf(entries map[string]any) *Inputs {
 	return NewInputs(entries, 0)
 }
 
-func mustGet(t *testing.T, inputs *Inputs, key string) *Input {
+func mustGet(t *testing.T, inputs *Inputs, key string) *Input[any] {
 	t.Helper()
 
 	handle, err := inputs.Get(key)

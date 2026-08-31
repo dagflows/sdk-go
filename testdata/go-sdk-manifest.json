@@ -2,7 +2,7 @@
   "v": 1,
   "runtime": {
     "language": "go",
-    "version": "1.26"
+    "version": "1.27"
   },
   "workflow": {
     "name": "branching-demo",
@@ -14,6 +14,13 @@
       "entrypoint": "app",
       "execution": {
         "machine": "m"
+      },
+      "io": {
+        "output": {
+          "shape": "value",
+          "content_type": "application/json",
+          "schema": {}
+        }
       }
     },
     {
@@ -29,6 +36,13 @@
       "execution": {
         "machine": "m",
         "timeout_ms": 30000
+      },
+      "io": {
+        "output": {
+          "shape": "value",
+          "content_type": "application/json",
+          "schema": {}
+        }
       }
     },
     {
@@ -39,7 +53,14 @@
       ],
       "external_depends": [
         "crunch"
-      ]
+      ],
+      "io": {
+        "output": {
+          "shape": "value",
+          "content_type": "application/json",
+          "schema": {}
+        }
+      }
     }
   ]
 }

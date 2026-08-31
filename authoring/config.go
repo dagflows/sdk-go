@@ -9,16 +9,17 @@ import (
 
 const millisPerSecond = 1_000
 
-// Execution defines resource and execution configuration options for a node.
+// Execution is the resource and execution configuration for a node.
 type Execution struct {
-	// Machine names one from the platform catalog (e.g. "gp-2", "gp-4", "gp-8").
+	// Machine names a machine from the platform catalog (e.g. "gp-2", "gp-4", "gp-8").
 	Machine string
-	// TimeoutSecs bounds a single execution of the node.
+	// TimeoutSecs bounds a single execution of the node, in seconds.
 	TimeoutSecs int
 	// GPU is reserved for future hardware acceleration options.
 	GPU string
 }
 
+// validate reports an execution setting this platform does not accept.
 func (c *Execution) validate() error {
 	if c.GPU != "" {
 		return fmt.Errorf("gpu is reserved, this platform does not offer one yet")
@@ -33,18 +34,20 @@ func (c *Execution) validate() error {
 	)
 }
 
-// Transfer configures how a node moves data in and out of storage.
+// Transfer is the data transfer and storage offloading configuration for a node.
 type Transfer struct {
-	// MaxOutputMB is how much this node expects to emit. Leaving it out asks
-	// for no multipart upload, which is not the same as asking for zero.
+	// MaxOutputMB is how much this node expects to emit, in megabytes. Leaving
+	// it out asks for no multipart upload, which is not the same as asking for
+	// zero.
 	MaxOutputMB int
-	// ConnTimeoutSecs bounds establishing a connection.
+	// ConnTimeoutSecs bounds establishing a connection, in seconds.
 	ConnTimeoutSecs int
-	// IdleTimeoutSecs bounds the gap between chunks. This never bounds the
-	// whole transfer: a large upload that keeps moving is not stalled.
+	// IdleTimeoutSecs bounds the gap between chunks, in seconds. This never
+	// bounds the whole transfer: a large upload that keeps moving is not stalled.
 	IdleTimeoutSecs int
 }
 
+// validate reports a negative transfer setting.
 func (c *Transfer) validate() error {
 	return nonNegative(
 		field{"max_output_mb", c.MaxOutputMB},
@@ -108,20 +111,33 @@ type Retry struct {
 	RetryOn []RetryCategory
 }
 
-// OnWarning is what a deploy does when the platform has to adjust a declared
-// value. A named type so a typo is a compile error rather than a policy the
-// platform quietly ignores.
+// OnWarning is the policy for handling platform configuration adjustments
+// during deployment. A named type so a typo is a compile error rather than a
+// policy the platform quietly ignores.
 type OnWarning string
 
 const (
-	// OnWarningAllow clamps and carries on, reporting the adjustment.
+	// OnWarningAllow applies platform limits and proceeds with deployment,
+	// reporting the adjustment.
 	OnWarningAllow OnWarning = "allow"
-	// OnWarningReject refuses the deploy rather than run settings the author
-	// did not write.
+	// OnWarningReject refuses deployment when platform limit adjustments
+	// occur, rather than running settings the author did not write.
 	OnWarningReject OnWarning = "reject"
 )
 
-// RetryCategory identifies a retryable failure category.
+// Mode is the execution lifecycle mode for a node. A named type so a typo is a
+// compile error rather than a lifetime the platform quietly ignores.
+type Mode string
+
+const (
+	// ModeOnce executes the handler on its inputs and exits on completion.
+	ModeOnce Mode = "once"
+	// ModeStream keeps the node running while its inputs flow, on a platform
+	// that offers live channels; on one that does not, it runs as ModeOnce.
+	ModeStream Mode = "stream"
+)
+
+// RetryCategory identifies a failure category a node can opt into retrying.
 type RetryCategory string
 
 // Permanent failures are non-retryable and deliberately excluded from constants.
@@ -138,6 +154,8 @@ var RetryableCategories = []RetryCategory{
 	RetryOnExecution,
 }
 
+// validate reports retry settings that would never run the node, invert the
+// backoff bounds, or name a category the platform does not retry.
 func (r *Retry) validate() error {
 	if r.MaxAttempts != nil && *r.MaxAttempts < 1 {
 		return fmt.Errorf("max_attempts=%d would never run the node, 1 means run once and do not retry",
@@ -177,6 +195,8 @@ func (r *Retry) validate() error {
 	return nil
 }
 
+// asManifest serializes author-configured retry settings where unset values
+// remain omitted.
 func (r *Retry) asManifest() *RetryManifest {
 	out := &RetryManifest{
 		MaxAttempts:      r.MaxAttempts,
@@ -200,6 +220,7 @@ type ptrField struct {
 	value *int
 }
 
+// nonNegativePtr reports the first set field holding a negative value.
 func nonNegativePtr(fields ...ptrField) error {
 	for _, f := range fields {
 		if f.value != nil && *f.value < 0 {
@@ -215,6 +236,7 @@ type field struct {
 	value int
 }
 
+// nonNegative reports the first field holding a negative value.
 func nonNegative(fields ...field) error {
 	for _, f := range fields {
 		if f.value < 0 {

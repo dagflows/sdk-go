@@ -227,7 +227,7 @@ func exportedNames(t *testing.T) map[string]bool {
 	return names
 }
 
-var selector = regexp.MustCompile(`\bdagflows\.([A-Z]\w*)`)
+var selector = regexp.MustCompile(`\b(?:dagflows|df)\.([A-Z]\w*)`)
 
 func TestEveryReferencedNameExists(t *testing.T) {
 	names := exportedNames(t)

@@ -65,7 +65,7 @@ func produce(t *testing.T, base string, rows []any, contentType ContentType, inl
 	}
 
 	env, err := ToEnvelope(
-		Result{
+		Result[any]{
 			Output:      output,
 			ContentType: contentType,
 		},
@@ -82,7 +82,7 @@ func produce(t *testing.T, base string, rows []any, contentType ContentType, inl
 	return env.Output
 }
 
-func consume(base string, block *Block) *Input {
+func consume(base string, block *Block) *Input[any] {
 	var entry map[string]any
 
 	if block.Type == INLINE {
@@ -100,7 +100,7 @@ func consume(base string, block *Block) *Input {
 		}
 	}
 
-	return &Input{
+	return &Input[any]{
 		key:           "parent",
 		entry:         entry,
 		memoryLimitMB: 512,
@@ -185,7 +185,7 @@ func TestTextRoundTripsThroughStorage(t *testing.T) {
 	base, _ := objectStore(t)
 	text := strings.Repeat("héllo wörld\n", 20)
 
-	env, err := ToEnvelope(Result{
+	env, err := ToEnvelope(Result[any]{
 		Output:      text,
 		ContentType: TEXT,
 	}, 16, &Upload{

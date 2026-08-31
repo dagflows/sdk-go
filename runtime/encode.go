@@ -10,7 +10,11 @@ import (
 	"strconv"
 )
 
-// encodeRows serializes all records in a single batch.
+// encodeRows serializes every record in one batch, according to the declared
+// content type: NDJSON lines, CSV, or a single JSON array.
+//
+// It writes through the shared compact encoder, so the bytes it uploads measure
+// the same as the inline check that decided to upload them.
 func encodeRows(records rows, contentType ContentType) ([]byte, error) {
 	collected := []any{}
 
@@ -89,7 +93,9 @@ func writeCSVRecord(out *bytes.Buffer, fields []string) {
 	out.WriteString("\r\n")
 }
 
-// encodeValue serializes a single value based on its content type.
+// encodeValue serializes a single value according to the declared content type,
+// passing raw bytes through unchanged and writing everything else with the
+// shared compact encoder.
 func encodeValue(value any, contentType ContentType) ([]byte, error) {
 	if contentType == TEXT {
 		return []byte(text(value)), nil
@@ -122,7 +128,8 @@ func text(value any) string {
 	}
 }
 
-// RowEncoder streams records incrementally.
+// RowEncoder serializes records one at a time for a streaming upload, holding
+// the framing each content type needs between rows.
 type RowEncoder struct {
 	contentType ContentType
 	json        *compactEncoder
@@ -183,6 +190,7 @@ func (e *RowEncoder) Finish() []byte {
 	return []byte("[]")
 }
 
+// csvRow serializes one record as a CSV row, writing the header on the first call.
 func (e *RowEncoder) csvRow(row any) ([]byte, error) {
 	record, err := asMapping(row)
 	if err != nil {
