@@ -78,8 +78,8 @@ var guards = []guard{
 	{
 		name: "outputs: a Result in the row position is refused",
 		file: "runtime/result.go",
-		old:  "	case Result, *Result:",
-		new:  "	case nil:",
+		old:  "	if IsResult(row) {",
+		new:  "	if false {",
 		pkg:  "./runtime", run: "TestAResultInTheRowPositionIsRefusedFromAnIterator",
 	},
 	{
@@ -274,7 +274,7 @@ var guards = []guard{
 	{
 		name: "authoring: a duplicate key is refused",
 		file: "authoring/workflow.go",
-		old:  "\tif _, taken := wf.handlers[key]; taken {",
+		old:  "\tif wf.keys[key] {",
 		new:  "\tif false {",
 		pkg:  "./authoring", run: "TestADuplicateKeyIsRefused",
 	},
@@ -288,8 +288,8 @@ var guards = []guard{
 	{
 		name: "authoring: the manifest keeps python's key order",
 		file: "authoring/manifest.go",
-		old:  "\tV        int               `json:\"v\"`\n\tRuntime  RuntimeManifest   `json:\"runtime\"`\n",
-		new:  "\tRuntime  RuntimeManifest   `json:\"runtime\"`\n\tV        int               `json:\"v\"`\n",
+		old:  "\tV        int                `json:\"v\"`\n\tRuntime  RuntimeManifest    `json:\"runtime\"`\n",
+		new:  "\tRuntime  RuntimeManifest    `json:\"runtime\"`\n\tV        int                `json:\"v\"`\n",
 		pkg:  ".", run: "TestTheAcceptanceFixtureIsByteStable",
 	},
 	{
