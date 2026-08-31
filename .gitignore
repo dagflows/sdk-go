@@ -1,4 +1,6 @@
-# Build and test leftovers
+# Binaries and build leftovers
+*.exe
+*.exe~
 /dist/
 /bin/
 *.test
@@ -9,10 +11,21 @@ fixture*.json
 /dagflows-manifest.json
 /testdata/*/dagflows-manifest.json
 
-.vscode/
-.idea/
+# Hidden directories
+.*/
+!.github/
+!.github/**
+
 *.swp
 .DS_Store
 Thumbs.db
+
+# Markdown documentation
+*.md
+![rR][eE][aA][dD][mM][eE].md
+
+# Keys and certificates
+*.pem
+*.ppk
 
 internal_refs/
