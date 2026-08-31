@@ -11,10 +11,12 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"os/signal"
 	"reflect"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 // RunInfo is which run and which node this is.
@@ -75,8 +77,11 @@ type Ctx struct {
 	Raw          map[string]any
 
 	background context.Context
-	cancel     context.CancelFunc
+	cancel     context.CancelCauseFunc
 }
+
+// ErrStopped indicates that the platform requested the node to stop, accessible via context.Cause.
+var ErrStopped = errors.New("the platform asked the node to stop")
 
 // CtxFromRaw parses the raw context map, applying fallback defaults for missing fields.
 func CtxFromRaw(raw map[string]any) *Ctx {
@@ -98,7 +103,7 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 		}
 	}
 
-	background, cancel := context.WithCancel(context.Background())
+	background, cancel := context.WithCancelCause(context.Background())
 
 	return &Ctx{
 		WorkflowRunID:   Str(raw["workflow_run_id"]),
@@ -173,6 +178,45 @@ func (c *Ctx) Context() context.Context {
 		return context.Background()
 	}
 	return c.background
+}
+
+// Cancel requests the run to stop with ErrStopped.
+func (c *Ctx) Cancel() {
+	if c == nil || c.cancel == nil {
+		return
+	}
+
+	c.cancel(ErrStopped)
+}
+
+// watchSignals cancels the execution context on SIGINT or SIGTERM and returns a teardown function.
+func (c *Ctx) watchSignals() func() {
+	if c == nil || c.cancel == nil {
+		return func() {}
+	}
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+
+	watching := make(chan struct{})
+
+	go func() {
+		select {
+		case <-signals:
+			signal.Stop(signals)
+			c.Cancel()
+		case <-watching:
+		}
+	}()
+
+	var once sync.Once
+
+	return func() {
+		once.Do(func() {
+			signal.Stop(signals)
+			close(watching)
+		})
+	}
 }
 
 var (

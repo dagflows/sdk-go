@@ -130,6 +130,10 @@ func Execute(handler Handler, ctx *Ctx, inputs *Inputs) (envelope any) {
 		}
 	}()
 
+	// Watch termination signals while the handler executes.
+	stopWatching := ctx.watchSignals()
+	defer stopWatching()
+
 	// The handler starts here, so this is where the node's timeout should begin
 	// being charged. Everything above was the runtime starting up.
 	signalReady()

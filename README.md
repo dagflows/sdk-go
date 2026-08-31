@@ -409,9 +409,11 @@ Errors the SDK returns are matchable with `errors.AsType` and `errors.Is`: `Inpu
 | `ctx.Config` | the node's own config block from the manifest |
 | `ctx.Trigger()` | delivery metadata of an event-triggered run: `Kind`, `ID`, `ReceivedAt`, `Attributes`; nil otherwise |
 | `ctx.Has("stream/v1")` | whether this platform offers a capability beyond the base contract |
-| `ctx.Context()` | cancelled when the platform asks the node to stop |
+| `ctx.Context()` | cancelled on SIGTERM or SIGINT, so a long node can stop cleanly |
 | `ctx.Log()` | a `*slog.Logger` on the console, which is the log path |
 | `ctx.Out(contentType)` | the output writer, for routing decided while writing |
+
+The first stop signal reaches the handler as cancellation and nothing else, and `context.Cause(ctx.Context())` says so. A second one terminates the process as it otherwise would, so a node that ignores cancellation stays interruptible.
 
 ## Long-running nodes
 
