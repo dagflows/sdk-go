@@ -24,13 +24,13 @@ func referenceWorkflow() *df.Workflow {
 	step1 := wf.Node(anything, df.Root, df.NodeOptions{
 		Key: "step_1",
 		Execution: &df.Execution{
-			Machine: "m",
+			Machine: "gp-2",
 		},
 	})
 	step2 := wf.Node(handler, df.Depends(step1), df.NodeOptions{
 		Key: "step_2",
 		Execution: &df.Execution{
-			Machine:     "m",
+			Machine:     "gp-2",
 			TimeoutSecs: 30,
 		},
 		Retry: &df.Retry{

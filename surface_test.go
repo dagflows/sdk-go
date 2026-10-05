@@ -167,7 +167,7 @@ func TestTheWorkflowDeclaresAndEmitsInProcess(t *testing.T) {
 	wf.Node(handler, df.Depends(first, wf.External[surfaceOut]("crunch")), df.NodeOptions{
 		Key: "second",
 		Execution: &df.Execution{
-			Machine:     "m",
+			Machine:     "gp-2",
 			TimeoutSecs: 30,
 		},
 		Transfer: &df.Transfer{

@@ -153,12 +153,12 @@ func main() {
 
 	counted := wf.Node(count, df.Depends(), df.NodeOptions{
 		Execution: &df.Execution{
-			Machine: "m",
+			Machine: "gp-2",
 		},
 	})
 	computed := wf.Node(compute, df.Depends(counted), df.NodeOptions{
 		Execution: &df.Execution{
-			Machine:     "m",
+			Machine:     "gp-2",
 			TimeoutSecs: 30,
 		},
 		Retry: &df.Retry{

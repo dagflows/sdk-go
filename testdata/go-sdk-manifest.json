@@ -13,7 +13,7 @@
       "key": "step_1",
       "entrypoint": "app",
       "execution": {
-        "machine": "m"
+        "machine": "gp-2"
       },
       "io": {
         "output": {
@@ -34,7 +34,7 @@
         "initial_backoff_ms": 1000
       },
       "execution": {
-        "machine": "m",
+        "machine": "gp-2",
         "timeout_ms": 30000
       },
       "io": {
