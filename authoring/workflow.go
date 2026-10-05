@@ -33,6 +33,8 @@ type WorkflowOptions struct {
 	OnWarning          OnWarning
 	// Retry sets default retry settings inherited and overridden field-by-field by nodes.
 	Retry *Retry
+	// Execution sets default execution settings inherited and overridden field-by-field by nodes.
+	Execution *Execution
 }
 
 // NodeOptions configures an individual node registration. Parents are not
@@ -56,6 +58,7 @@ type Workflow struct {
 	MaxCycleCount      int
 	OnWarning          OnWarning
 	Retry              *Retry
+	Execution          *Execution
 
 	nodes    []*NodeManifest
 	triggers []*TriggerManifest
@@ -78,6 +81,7 @@ func NewWorkflow(name string, opts WorkflowOptions) *Workflow {
 		MaxCycleCount:      opts.MaxCycleCount,
 		OnWarning:          opts.OnWarning,
 		Retry:              opts.Retry,
+		Execution:          opts.Execution,
 		handlers:           map[string]runtime.Handler{},
 		keys:               map[string]bool{},
 	}
@@ -101,6 +105,12 @@ func NewWorkflow(name string, opts WorkflowOptions) *Workflow {
 	if opts.Retry != nil {
 		if err := opts.Retry.validate(); err != nil {
 			wf.fail(fmt.Errorf("workflow retry default: %w", err))
+		}
+	}
+
+	if opts.Execution != nil {
+		if err := opts.Execution.validate(); err != nil {
+			wf.fail(fmt.Errorf("workflow execution default: %w", err))
 		}
 	}
 
@@ -444,6 +454,10 @@ func (wf *Workflow) Manifest() (*Manifest, error) {
 
 		if wf.Retry != nil {
 			out.Workflow.Retry = wf.Retry.asManifest()
+		}
+
+		if wf.Execution != nil {
+			out.Workflow.Execution = wf.Execution.asManifest()
 		}
 	}
 

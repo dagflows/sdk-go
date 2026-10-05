@@ -397,6 +397,29 @@ func TestWorkflowRetryDefaultReachesTheManifest(t *testing.T) {
 	require.Nil(t, manifest.Nodes[0].Retry)
 }
 
+// Tests that a workflow execution default reaches the manifest for the platform to merge.
+func TestWorkflowExecutionDefaultReachesTheManifest(t *testing.T) {
+	wf := NewWorkflow("demo", WorkflowOptions{
+		Execution: &Execution{Machine: "gp-4", TimeoutSecs: 600},
+	})
+	wf.Node(first, runtime.Root, NodeOptions{Key: "heavy"})
+
+	manifest := manifestOf(t, wf)
+
+	require.Equal(t, &ExecutionManifest{Machine: "gp-4", TimeoutMs: new(int64(600_000))}, manifest.Workflow.Execution)
+	require.Nil(t, manifest.Nodes[0].Execution, "the node keeps only what it states")
+}
+
+// Tests that a workflow execution default is checked as a node's is.
+func TestAWorkflowExecutionDefaultIsChecked(t *testing.T) {
+	wf := NewWorkflow("demo", WorkflowOptions{Execution: &Execution{GPU: "a100"}})
+	wf.Node(first, runtime.Root, NodeOptions{Key: "g"})
+
+	_, err := wf.Manifest()
+	require.ErrorContains(t, err, "workflow execution default")
+	require.ErrorContains(t, err, "gpu")
+}
+
 // Tests that a category the platform would never retry is refused at declaration.
 func TestRetryOnRefusesWhatCannotBeRetried(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{})

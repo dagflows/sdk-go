@@ -211,9 +211,10 @@ func extractData(*df.Ctx, df.None) (map[string]any, error) {
 
 func main() {
 	wf := df.NewWorkflow("data_pipeline", df.WorkflowOptions{
-		// Every node inherits this; a node stating its own overrides it field
-		// by field, so the settings it leaves out still apply.
-		Retry: &df.Retry{MaxAttempts: new(3), InitialBackoffMs: new(1000)},
+		// Every node inherits these, and a node stating its own overrides them
+		// field by field, so the settings it leaves out still apply.
+		Retry:     &df.Retry{MaxAttempts: new(3), InitialBackoffMs: new(1000)},
+		Execution: &df.Execution{Machine: "gp-2"},
 	})
 
 	wf.Node(extractData, df.Root, df.NodeOptions{
