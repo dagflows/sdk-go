@@ -102,12 +102,15 @@ func (c *Execution) asManifest() *ExecutionManifest {
 
 // Retry configures optional node retry settings where unstated fields inherit platform defaults.
 type Retry struct {
-	// MaxAttempts includes the initial execution (1 means no retries).
+	// MaxAttempts includes the initial execution, so 1 means a failure after
+	// the node's code started is not retried.
 	MaxAttempts *int
 	// InitialBackoffMs is the starting delay that doubles per attempt up to MaxBackoffMs.
 	InitialBackoffMs *int
 	MaxBackoffMs     *int
-	// RetryOn specifies error categories to retry (empty list disables category retries).
+	// RetryOn names the categories of the node's own failures that are
+	// retried. Unset keeps the platform's default, infrastructure and
+	// execution, and an empty list retries none.
 	RetryOn []RetryCategory
 }
 

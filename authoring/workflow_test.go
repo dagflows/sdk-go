@@ -397,6 +397,20 @@ func TestWorkflowRetryDefaultReachesTheManifest(t *testing.T) {
 	require.Nil(t, manifest.Nodes[0].Retry)
 }
 
+// Tests that a node asking to retry none of its own failures says so in the
+// manifest it writes, rather than leaving the list out and getting the default.
+func TestAnEmptyRetryOnReachesTheWrittenManifest(t *testing.T) {
+	none := NewWorkflow("demo", WorkflowOptions{})
+	none.Node(first, runtime.Root, NodeOptions{Retry: &Retry{MaxAttempts: new(3), RetryOn: []RetryCategory{}}})
+
+	require.JSONEq(t, `{"max_attempts": 3, "retry_on": []}`, encoded(t, manifestOf(t, none).Nodes[0].Retry))
+
+	unset := NewWorkflow("demo", WorkflowOptions{})
+	unset.Node(first, runtime.Root, NodeOptions{Retry: &Retry{MaxAttempts: new(3)}})
+
+	require.JSONEq(t, `{"max_attempts": 3}`, encoded(t, manifestOf(t, unset).Nodes[0].Retry), "unset leaves the platform's default")
+}
+
 // Tests that a workflow execution default reaches the manifest for the platform to merge.
 func TestWorkflowExecutionDefaultReachesTheManifest(t *testing.T) {
 	wf := NewWorkflow("demo", WorkflowOptions{

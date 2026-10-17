@@ -220,8 +220,8 @@ func main() {
 	wf.Node(extractData, df.Root, df.NodeOptions{
 		Key:       "extract_data",
 		Execution: &df.Execution{Machine: "gp-8", TimeoutSecs: 300},
-		// Only the platform's own failures are retried unless a node says
-		// otherwise. Settings are pointers so leaving one out means "let the
+		// A node's own failures are retried only when it allows more than one
+		// attempt. Settings are pointers so leaving one out means "let the
 		// platform decide" rather than zero, and new(5) states one inline.
 		Retry: &df.Retry{
 			MaxAttempts: new(5),
@@ -235,15 +235,17 @@ func main() {
 
 Use `Machine` to select a resource tier from the platform catalog (e.g. `"gp-1"`, `"gp-2"`, `"gp-4"`, `"gp-8"`, `"gp-16"`). The name carries the memory in GB, so `gp-8` is the 8 GB tier. Set `TimeoutSecs` to cap node execution duration in seconds, and declare `MaxOutputMB` if your node needs multipart upload capabilities for large outputs.
 
-`MaxAttempts` counts the first run, so `1` means run once and do not retry. Backoff doubles per attempt up to `MaxBackoffMs`.
+`MaxAttempts` counts the first run, so `1` means a failure after your code started is not retried. Backoff doubles per attempt up to `MaxBackoffMs`.
 
 Leaving a setting out is not the same as setting it to zero, which is why they are pointers: unstated means the platform decides, and that is what lets a workflow default reach a node at all. `new(5)` states one inline.
 
-By default only the platform's own failures are retried. `RetryOn` widens that, and `RetryCategory` names what can be asked for:
+A failure of the platform before your code starts is retried for you, costs nothing and does not count against `MaxAttempts`. A failure of the platform after your code started, such as its machine being lost, costs nothing either, up to your plan's daily allowance of them, and is retried without counting when `MaxAttempts` allows retries. Past the allowance it is charged and counts as a failure of your own. The platform decides whose a failure was from what its hosts saw, never from the category a node reports.
+
+Failures of your own code are always charged, each retry included, and are retried only when `MaxAttempts` is above 1, for the categories in `RetryOn`, which holds `RetryOnInfrastructure` and `RetryOnExecution` unless you say otherwise. A timeout is retried only when you add `RetryOnTimeout`, since the same work would most likely run out of time again, and an empty `RetryOn` retries none. `RetryCategory` names what can be asked for:
 
 | constant | what it means |
 | --- | --- |
-| `RetryOnInfrastructure` | the platform could not run the node |
+| `RetryOnInfrastructure` | something the node depends on failed |
 | `RetryOnTimeout` | the node ran out of its time budget |
 | `RetryOnExecution` | the node itself failed |
 
@@ -395,7 +397,7 @@ return nil, &df.Fail{Message: "Payment gateway unavailable", Category: df.EXECUT
 return nil, &df.Fail{Message: "card declined", Category: df.EXECUTION, Code: "card_declined", Details: map[string]any{"last4": "4242"}}
 ```
 
-Naming a delay implies "retry me"; naming nothing aborts. `Abort: new(false)` with no delay leaves retry timing to the workflow's policy. Categories: `EXECUTION`, `INFRASTRUCTURE`, `TIMEOUT`, `PERMANENT`. Anything else collapses to permanent, because an unknown category must never silently become retryable.
+Naming a delay implies "retry me", while `MaxAttempts` allows it, and naming nothing aborts. `Abort: new(false)` with no delay leaves retry timing to the workflow's policy. Categories: `EXECUTION`, `INFRASTRUCTURE`, `TIMEOUT`, `PERMANENT`. Anything else collapses to permanent, because an unknown category must never silently become retryable.
 
 Errors the SDK returns are matchable with `errors.AsType` and `errors.Is`: `InputTooLarge`, `InputUnavailable`, `OutputTooLarge`.
 

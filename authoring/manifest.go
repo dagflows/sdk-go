@@ -134,11 +134,12 @@ type ExecutionManifest struct {
 }
 
 // RetryManifest holds author-configured retry settings where nil indicates unset values.
+// An empty RetryOn is kept, since it asks to retry none.
 type RetryManifest struct {
 	MaxAttempts      *int     `json:"max_attempts,omitempty"`
 	InitialBackoffMs *int     `json:"initial_backoff_ms,omitempty"`
 	MaxBackoffMs     *int     `json:"max_backoff_ms,omitempty"`
-	RetryOn          []string `json:"retry_on,omitempty"`
+	RetryOn          []string `json:"retry_on,omitzero"`
 }
 
 // entry is one key and value of a config block.
