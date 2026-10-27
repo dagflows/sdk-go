@@ -25,7 +25,7 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME}"
           major="${tag#v}"; major="${major%%.*}"
-          manifest=$(grep -E 'const ManifestVersion = ' internal/authoring/manifest.go | grep -oE '[0-9]+')
+          manifest=$(grep -E 'const ManifestVersion = ' authoring/manifest.go | grep -oE '[0-9]+')
           echo "tag=$tag major=$major manifest=v$manifest"
           test "$major" = "$manifest" || test "$major" = "0"
           if [ "$major" -ge 2 ]; then
