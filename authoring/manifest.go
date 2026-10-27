@@ -40,6 +40,8 @@ type WorkflowManifest struct {
 	OnWarning OnWarning          `json:"on_warning,omitempty"`
 	Retry     *RetryManifest     `json:"retry,omitempty"`
 	Execution *ExecutionManifest `json:"execution,omitempty"`
+	// Env names the variables every node of the workflow gets.
+	Env []string `json:"env,omitempty"`
 }
 
 // TriggerManifest is an event source the workflow declares, with the schema of
@@ -64,6 +66,8 @@ type NodeManifest struct {
 	Transfer        *TransferManifest  `json:"transfer,omitempty"`
 	Mode            string             `json:"mode,omitempty"`
 	IO              *IOManifest        `json:"io,omitempty"`
+	// Env names the variables the node gets beside its workflow's.
+	Env []string `json:"env,omitempty"`
 }
 
 // IOManifest is the node's typed contract: what it expects of each parent

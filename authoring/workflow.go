@@ -35,6 +35,9 @@ type WorkflowOptions struct {
 	Retry *Retry
 	// Execution sets default execution settings inherited and overridden field-by-field by nodes.
 	Execution *Execution
+	// Env names the variables every node gets, beside those it names itself,
+	// read with os.Getenv inside a node. Only a named workflow states them.
+	Env []string
 }
 
 // NodeOptions configures an individual node registration. Parents are not
@@ -48,6 +51,9 @@ type NodeOptions struct {
 	Type      string
 	// Mode is the node's execution lifecycle; unset means ModeOnce.
 	Mode Mode
+	// Env names the variables the node gets beside its workflow's, read with
+	// os.Getenv inside it.
+	Env []string
 }
 
 // Workflow is the declared DAG topology and node registry for a project.
@@ -59,6 +65,7 @@ type Workflow struct {
 	OnWarning          OnWarning
 	Retry              *Retry
 	Execution          *Execution
+	Env                []string
 
 	nodes    []*NodeManifest
 	triggers []*TriggerManifest
@@ -82,6 +89,7 @@ func NewWorkflow(name string, opts WorkflowOptions) *Workflow {
 		OnWarning:          opts.OnWarning,
 		Retry:              opts.Retry,
 		Execution:          opts.Execution,
+		Env:                slices.Clone(opts.Env),
 		handlers:           map[string]runtime.Handler{},
 		keys:               map[string]bool{},
 	}
@@ -112,6 +120,16 @@ func NewWorkflow(name string, opts WorkflowOptions) *Workflow {
 		if err := opts.Execution.validate(); err != nil {
 			wf.fail(fmt.Errorf("workflow execution default: %w", err))
 		}
+	}
+
+	if err := checkEnv("the workflow", opts.Env); err != nil {
+		wf.fail(err)
+	}
+
+	// Only the project that names the workflow states what all its nodes get.
+	if len(opts.Env) > 0 && name == "" {
+		wf.fail(errors.New("env on a workflow needs its name, since only the project that names a workflow " +
+			"states what all its nodes get; name the variables on each node instead"))
 	}
 
 	declaredMu.Lock()
@@ -190,11 +208,18 @@ func register[In, Out any](wf *Workflow, fn any, in runtime.Edge[In], opts []Nod
 		return ref
 	}
 
+	if err := checkEnv(fmt.Sprintf("node '%s'", key), options.Env); err != nil {
+		wf.fail(err)
+	} else if err := checkEnvCount(key, wf.Env, options.Env); err != nil {
+		wf.fail(err)
+	}
+
 	edge := runtime.Describe(in)
 	node := &NodeManifest{
 		Key:        key,
 		Entrypoint: Entrypoint,
 		Type:       options.Type,
+		Env:        slices.Clone(options.Env),
 	}
 
 	for _, parent := range edge.Parents {
@@ -459,6 +484,8 @@ func (wf *Workflow) Manifest() (*Manifest, error) {
 		if wf.Execution != nil {
 			out.Workflow.Execution = wf.Execution.asManifest()
 		}
+
+		out.Workflow.Env = slices.Clone(wf.Env)
 	}
 
 	for _, t := range wf.triggers {

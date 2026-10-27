@@ -2,6 +2,9 @@ package authoring
 
 import (
 	"encoding/json"
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -850,4 +853,111 @@ func TestAnUnknownOnWarningPolicyIsRefused(t *testing.T) {
 
 	_, err := wf.Manifest()
 	require.ErrorContains(t, err, "not a policy")
+}
+
+// Tests that env reaches the workflow and each node that names some, in the
+// order written, after io, as the other SDKs emit it.
+func TestEnvReachesTheWorkflowAndEachNodeThatNamesSome(t *testing.T) {
+	wf := NewWorkflow("billing", WorkflowOptions{Env: []string{"SENTRY_DSN"}})
+	charge := wf.Node(first, runtime.Root, NodeOptions{Key: "charge", Env: []string{"STRIPE_KEY", "SENTRY_DSN"}})
+	wf.Node(second, runtime.Depends(charge), NodeOptions{Key: "notify"})
+
+	manifest := manifestOf(t, wf)
+	require.Equal(t, []string{"SENTRY_DSN"}, manifest.Workflow.Env)
+	require.Equal(t, []string{"STRIPE_KEY", "SENTRY_DSN"}, manifest.Nodes[0].Env)
+	require.Nil(t, manifest.Nodes[1].Env)
+
+	encoded, err := manifest.Encode()
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"name": "billing",
+    "env": [
+      "SENTRY_DSN"
+    ]`)
+	require.Contains(t, string(encoded), `      },
+      "env": [
+        "STRIPE_KEY",
+        "SENTRY_DSN"
+      ]
+    },`, "a node's env follows its io")
+	require.Equal(t, 2, strings.Count(string(encoded), `"env"`))
+}
+
+func TestANameTheBuilderRefusesIsRefusedWhereItIsWritten(t *testing.T) {
+	for name, says := range map[string]string{
+		"1PASSWORD":              "not a variable name",
+		"STRIPE-KEY":             "not a variable name",
+		"STRIPE KEY":             "not a variable name",
+		"KEY\n":                  "not a variable name",
+		"CLÉ":                    "not a variable name",
+		"":                       "not a variable name",
+		strings.Repeat("N", 129): "past the 128",
+		"PATH":                   "set in a node's environment by the platform",
+		"PYTHONUNBUFFERED":       "set in a node's environment by the platform",
+		"DAGFLOWS_INPUT":         "the platform's",
+		"LD_PRELOAD":             "the dynamic loader's",
+	} {
+		wf := NewWorkflow("demo", WorkflowOptions{Env: []string{name}})
+		wf.Node(first, runtime.Root)
+		_, err := wf.Manifest()
+		require.ErrorContains(t, err, says, "the workflow naming %q", name)
+
+		wf = NewWorkflow("demo", WorkflowOptions{})
+		wf.Node(first, runtime.Root, NodeOptions{Env: []string{name}})
+		_, err = wf.Manifest()
+		require.ErrorContains(t, err, says, "a node naming %q", name)
+	}
+}
+
+func TestNamesDifferByCaseFromTheOnesKept(t *testing.T) {
+	wf := NewWorkflow("demo", WorkflowOptions{Env: []string{"path", "Home", "ld_preload", "dagflows_input", strings.Repeat("N", 128)}})
+	wf.Node(first, runtime.Root, NodeOptions{Env: []string{"_PRIVATE", "X1"}})
+
+	require.Equal(t, "path", manifestOf(t, wf).Workflow.Env[0])
+}
+
+func TestANameListedTwiceIsRefused(t *testing.T) {
+	wf := NewWorkflow("demo", WorkflowOptions{Env: []string{"A", "B", "A"}})
+	wf.Node(first, runtime.Root)
+
+	_, err := wf.Manifest()
+	require.ErrorContains(t, err, `names the variable "A" twice`)
+}
+
+func TestANodeNamesAtMostFiftyWithItsWorkflows(t *testing.T) {
+	names := func(prefix string, count int) []string {
+		out := make([]string, count)
+		for i := range out {
+			out[i] = fmt.Sprintf("%s%d", prefix, i)
+		}
+
+		return out
+	}
+
+	// A workflow's name the node repeats is counted once.
+	shared := names("W", 30)
+	wf := NewWorkflow("demo", WorkflowOptions{Env: shared})
+	wf.Node(first, runtime.Root, NodeOptions{Key: "fits", Env: slices.Concat(shared, names("N", 20))})
+	manifestOf(t, wf)
+
+	wf.Node(first, runtime.Root, NodeOptions{Key: "over", Env: names("N", 21)})
+	_, err := wf.Manifest()
+	require.ErrorContains(t, err, "node 'over' names 51 variables with its workflow's, past the 50")
+
+	alone := NewWorkflow("demo", WorkflowOptions{Env: names("V", 51)})
+	alone.Node(first, runtime.Root)
+	_, err = alone.Manifest()
+	require.ErrorContains(t, err, "names 51 variables, past the 50")
+}
+
+// Tests that a workflow with no name names no env: its nodes join a workflow
+// another project names, which states what all of them get.
+func TestAWorkflowWithoutANameNamesNoEnv(t *testing.T) {
+	wf := NewWorkflow("", WorkflowOptions{Env: []string{"SENTRY_DSN"}})
+	wf.Node(first, runtime.Root)
+	_, err := wf.Manifest()
+	require.ErrorContains(t, err, "needs its name")
+
+	wf = NewWorkflow("", WorkflowOptions{Version: "1.27"})
+	wf.Node(first, runtime.Root, NodeOptions{Env: []string{"STRIPE_KEY"}})
+	require.Equal(t, []string{"STRIPE_KEY"}, manifestOf(t, wf).Nodes[0].Env)
 }

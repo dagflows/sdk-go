@@ -251,6 +251,38 @@ Failures of your own code are always charged, each retry included, and are retri
 
 There is no constant for `permanent` on purpose: the platform reports it when running the node again cannot change the outcome, so asking to retry it is refused.
 
+### Variables and secrets
+
+A node gets the variables its code names, as plain environment variables. Name them with `Env`, on the workflow for every node and on a node for its own:
+
+```go
+// file: variables/main.go
+package main
+
+import (
+	"os"
+
+	df "github.com/dagflows/sdk-go"
+)
+
+func charge(*df.Ctx, df.None) (map[string]any, error) {
+	// Read inside the node: the build that emits the manifest has no variables.
+	return map[string]any{"configured": os.Getenv("STRIPE_KEY") != ""}, nil
+}
+
+func main() {
+	wf := df.NewWorkflow("billing", df.WorkflowOptions{Env: []string{"SENTRY_DSN"}})
+
+	wf.Node(charge, df.Root, df.NodeOptions{Key: "charge", Env: []string{"STRIPE_KEY"}})
+
+	df.Main()
+}
+```
+
+Their values are set on the platform, on the organization, a project or the workflow itself, and each name takes the workflow's own value, else its project's, else its organization's. A secret is never shown again once set, and is masked in the node's logs. A deploy that names a variable none of them holds fails, naming each node and name, and a node gets the values as they are when it starts.
+
+A name is letters, digits and `_`, not starting with a digit, at most 128 characters, and a node names at most 50, its workflow's and its own together. Names starting with `DAGFLOWS_` or `LD_`, and `PATH`, `HOME`, `TMPDIR`, `USER`, `LOGNAME`, `PWD`, `SHELL` and `PYTHONUNBUFFERED`, are the platform's. Naming one of those, or a name twice, is refused when the manifest is built, with the declaration named. A workflow names its variables only when it has a name, since a project that names none adds its nodes to a workflow another project names.
+
 ### Cross-project dependencies
 
 Edges take the handles `Node` returned, never strings, so a typo fails to compile. A node in another project is the one thing you name by key, and the type you give it is what this project expects of it, which the builder checks against what that project's SDK declared:
