@@ -11,10 +11,10 @@ help:  ## show this
 
 check: lint test static guards  ## everything CI runs, before you push
 
-lint:  ## gofmt, vet, and staticcheck when installed
+lint:  ## gofmt, vet, and staticcheck at the version CI pins
 	@test -z "$$(gofmt -l .)" || (gofmt -l . && echo "gofmt: the files above need formatting" && exit 1)
 	go vet ./...
-	@command -v staticcheck >/dev/null && staticcheck ./... || echo "staticcheck not installed, skipped"
+	go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
 fmt:  ## apply gofmt
 	gofmt -w .

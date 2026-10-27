@@ -220,7 +220,7 @@ func TestATypeMayDescribeItselfThroughAPointerReceiver(t *testing.T) {
 	require.Equal(t, `{"type":["string","null"],"format":"uuid"}`, marshalled(t, schema))
 }
 
-type pointerSchemer struct{ id string }
+type pointerSchemer struct{}
 
 func (*pointerSchemer) DagflowsSchema() Schema {
 	return Schema{{"type", "string"}, {"format", "uuid"}}
@@ -232,7 +232,8 @@ func TestEmbeddedStructsFlattenAsEncodingJSONDoes(t *testing.T) {
 	}
 	type named struct {
 		base
-		Name   string `json:"name"`
+		Name string `json:"name"`
+		//lint:ignore U1000 the schema must leave an unexported field out
 		hidden int
 		Skip   string `json:"-"`
 		Alias  string

@@ -51,9 +51,8 @@ jobs:
         run: go vet ./...
 
       - name: staticcheck
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          staticcheck ./...
+        # Pinned: a new release adds checks and would fail an unchanged tree.
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
       - name: go.mod and go.sum are tidy
         run: |
