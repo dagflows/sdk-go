@@ -104,6 +104,23 @@ func TestNumericFieldsCoerceIntsAndFloatsAndDefaultOtherwise(t *testing.T) {
 	require.Empty(t, ctx.Config)
 }
 
+func TestTheTriggerSaysWhichReplayStartedTheRun(t *testing.T) {
+	trigger := func(replay any) map[string]any {
+		block := map[string]any{"kind": "webhook", "id": "evt-1", "received_at": "2026-11-03T12:00:00Z"}
+		if replay != nil {
+			block["replay"] = replay
+		}
+
+		return map[string]any{"trigger": block}
+	}
+
+	require.Equal(t, 2, CtxFromRaw(trigger(float64(2))).Trigger().Replay)
+	require.Equal(t, 2, CtxFromRaw(trigger(json.Number("2"))).Trigger().Replay)
+	require.Zero(t, CtxFromRaw(trigger(nil)).Trigger().Replay, "a first run names no replay")
+	require.Zero(t, CtxFromRaw(trigger("2")).Trigger().Replay)
+	require.Zero(t, CtxFromRaw(trigger(true)).Trigger().Replay)
+}
+
 func TestMissingInputPathNamesTheLocalWorkflow(t *testing.T) {
 	t.Setenv(InputEnv, "")
 

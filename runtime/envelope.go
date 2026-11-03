@@ -36,12 +36,15 @@ type Limits struct {
 }
 
 // TriggerInfo is how an event-triggered run was started. The event itself is
-// an input, keyed by the trigger.
+// an input, keyed by the trigger. Replay is the replay that started the run, 0
+// for the event's first run, so a node with side effects can tell a replay
+// from the first run.
 type TriggerInfo struct {
 	Kind       string
 	ID         string
 	ReceivedAt string
 	Attributes map[string]any
+	Replay     int
 }
 
 // Ctx is the execution metadata for this node run.
@@ -168,6 +171,7 @@ func (c *Ctx) Trigger() *TriggerInfo {
 		ID:         Str(raw["id"]),
 		ReceivedAt: Str(raw["received_at"]),
 		Attributes: attributes,
+		Replay:     int(Num(raw["replay"], 0)),
 	}
 }
 

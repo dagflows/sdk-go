@@ -145,6 +145,7 @@ func TestTheInputEnvelopeCarriesTriggerAndCapabilities(t *testing.T) {
 		ID:         "delivery-7",
 		ReceivedAt: "2026-08-30T12:00:00Z",
 		Attributes: map[string]any{"source": "shop"},
+		Replay:     2,
 	}, ctx.Trigger())
 	require.Nil(t, CtxFromRaw(map[string]any{}).Trigger(), "a run nothing triggered has no trigger")
 

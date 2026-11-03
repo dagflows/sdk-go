@@ -442,7 +442,7 @@ Errors the SDK returns are matchable with `errors.AsType` and `errors.Is`: `Inpu
 | `ctx.Run()` | `WorkflowRunID`, `NodeKey`, `Attempt`, `Language`, `RuntimeVersion` |
 | `ctx.Limits()` | `MemoryMB`, `MilliCores`, `TimeoutMs` |
 | `ctx.Config` | the node's own config block from the manifest |
-| `ctx.Trigger()` | delivery metadata of an event-triggered run: `Kind`, `ID`, `ReceivedAt`, `Attributes`; nil otherwise |
+| `ctx.Trigger()` | delivery metadata of an event-triggered run: `Kind`, `ID`, `ReceivedAt`, `Attributes`, `Replay`; nil otherwise |
 | `ctx.Has("stream/v1")` | whether this platform offers a capability beyond the base contract |
 | `ctx.Context()` | cancelled on SIGTERM or SIGINT, so a long node can stop cleanly |
 | `ctx.Log()` | a `*slog.Logger` on the console, which is the log path |
@@ -540,6 +540,8 @@ var _ = wf.Node(onOrder, placed, df.NodeOptions{Key: "on_order"})
 
 func main() { df.Main() }
 ```
+
+`ctx.Trigger().Replay` is the replay that started the run, 0 for the event's first run, so a node with side effects outside the run, such as an email or a charge, can tell a replay from the first run.
 
 The manifest lists the trigger with its schema and the node as `triggered_by` it; which kinds of trigger exist and how they are bound is the platform's side.
 
