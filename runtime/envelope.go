@@ -506,7 +506,7 @@ func (in *Input[T]) Bytes() (io.ReadCloser, error) {
 	}
 
 	if in.isReference() {
-		return stream(in.URL())
+		return stream(in.URL(), in.Size())
 	}
 
 	stored := in.entry["data"]
@@ -564,7 +564,7 @@ func (in *Input[T]) Iter() rows {
 			return
 		}
 
-		body, err := stream(in.URL())
+		body, err := stream(in.URL(), in.Size())
 		if err != nil {
 			yield(nil, err)
 			return

@@ -67,7 +67,7 @@ func newStore(t *testing.T, body []byte) (string, *received) {
 func readAll(t *testing.T, rawURL string, chunk int) ([][]byte, error) {
 	t.Helper()
 
-	body, err := stream(rawURL)
+	body, err := stream(rawURL, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +104,115 @@ func TestABodyArrivesWholeAndInPieces(t *testing.T) {
 	require.Equal(t, body, joined(chunks))
 }
 
+// readSized reads the input at rawURL whole, held to size.
+func readSized(t *testing.T, rawURL string, size int64) ([]byte, error) {
+	t.Helper()
+
+	body, err := stream(rawURL, size)
+	if err != nil {
+		return nil, err
+	}
+
+	defer body.Close()
+
+	return io.ReadAll(body)
+}
+
+// Tests that an input whose body ends short of the size recorded for it, or
+// runs past it, fails as the platform's, to be retried, without its link's
+// signature, and that one of its size, or of no size recorded, reads whole.
+func TestAnInputIsReadAgainstTheSizeRecordedForIt(t *testing.T) {
+	body := []byte(strings.Repeat("x", 1000))
+	base, _ := newStore(t, body)
+
+	for name, c := range map[string]struct {
+		size int64
+		want string
+	}{
+		"short of its size": {1500, "it ended after 1000 of its 1500 bytes"},
+		"past its size":     {500, "it ran past the 500 bytes recorded for it"},
+	} {
+		_, err := readSized(t, base+"/data?X-Amz-Signature=deadbeef", c.size)
+
+		var failure *Fail
+
+		require.ErrorAs(t, err, &failure, name)
+		require.Equal(t, INFRASTRUCTURE, failure.Category, name)
+		require.False(t, *failure.Abort, name)
+		require.Contains(t, failure.Message, c.want, name)
+		require.NotContains(t, failure.Message, "deadbeef", name)
+	}
+
+	for _, size := range []int64{1000, 0} {
+		got, err := readSized(t, base+"/data", size)
+		require.NoError(t, err, "size %d", size)
+		require.Equal(t, body, got, "size %d", size)
+	}
+}
+
+// Tests that an input cut the way the storage channel cuts a read, chunked and
+// with no last chunk, fails as the platform's, to be retried.
+func TestAnInputCutBeforeItsLastChunkFailsAsThePlatforms(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, strings.Repeat("x", 50))
+		_ = http.NewResponseController(w).Flush()
+
+		panic(http.ErrAbortHandler)
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := readSized(t, server.URL+"/obj", 0)
+
+	var failure *Fail
+
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, INFRASTRUCTURE, failure.Category)
+	require.False(t, *failure.Abort)
+}
+
+// Tests that a stored input is read against the size recorded for it, whether
+// its rows are iterated or its bytes read.
+func TestAStoredInputIsReadAgainstItsRecordedSize(t *testing.T) {
+	body := []byte("{\"a\": 1}\n{\"a\": 2}\n")
+	base, _ := newStore(t, body)
+
+	entry := func(size int) map[string]any {
+		return map[string]any{"type": REFERENCE, "url": base + "/rows", "size": size, "content_type": NDJSON}
+	}
+
+	whole := mustGet(t, inputsOf(map[string]any{"rows": entry(len(body))}), "rows")
+
+	var rows []any
+
+	for row, err := range whole.Iter() {
+		require.NoError(t, err)
+
+		rows = append(rows, row)
+	}
+
+	require.Len(t, rows, 2)
+
+	short := mustGet(t, inputsOf(map[string]any{"rows": entry(len(body) + 1)}), "rows")
+
+	var failed error
+
+	for _, err := range short.Iter() {
+		if err != nil {
+			failed = err
+		}
+	}
+
+	require.ErrorContains(t, failed, "it ended after 18 of its 19 bytes")
+
+	reader, err := short.Bytes()
+	require.NoError(t, err)
+
+	_, err = io.ReadAll(reader)
+	reader.Close()
+	require.ErrorContains(t, err, "it ended after 18 of its 19 bytes")
+}
+
 func joined(chunks [][]byte) []byte {
 	var out []byte
 
@@ -117,7 +226,7 @@ func joined(chunks [][]byte) []byte {
 func TestAFailedReadIsRetryableOnTheWorkflowPolicy(t *testing.T) {
 	base, _ := newStore(t, nil)
 
-	_, err := stream(base + "/boom")
+	_, err := stream(base+"/boom", 0)
 	fail, ok := errors.AsType[*Fail](err)
 	require.True(t, ok, "%v", err)
 	require.Equal(t, INFRASTRUCTURE, fail.Category)
@@ -129,7 +238,7 @@ func TestAFailedReadIsRetryableOnTheWorkflowPolicy(t *testing.T) {
 func TestAFailureNeverLogsTheSignature(t *testing.T) {
 	base, _ := newStore(t, nil)
 
-	_, err := stream(base + "/boom?X-Amz-Signature=deadbeef&X-Amz-Expires=900")
+	_, err := stream(base+"/boom?X-Amz-Signature=deadbeef&X-Amz-Expires=900", 0)
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "deadbeef")
 	require.Contains(t, err.Error(), "boom")
@@ -141,7 +250,7 @@ func TestAFailureNeverLogsTheSignature(t *testing.T) {
 	closed := "http://" + listener.Addr().String()
 	listener.Close()
 
-	_, err = stream(closed + "/obj?X-Amz-Signature=deadbeef")
+	_, err = stream(closed+"/obj?X-Amz-Signature=deadbeef", 0)
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "deadbeef")
 	require.Contains(t, err.Error(), "/obj")
@@ -237,7 +346,7 @@ func TestAServerThatNeverAnswersTimesOut(t *testing.T) {
 		server.Close()
 	})
 
-	_, err := stream(server.URL + "/never")
+	_, err := stream(server.URL+"/never", 0)
 	fail, ok := errors.AsType[*Fail](err)
 	require.True(t, ok, "%v", err)
 	require.Contains(t, fail.Message, "no data for 150ms")
@@ -256,7 +365,7 @@ func TestAnErrorStatusCarriesTheProvidersDiagnosisWithTheSignatureScrubbed(t *te
 	require.NotContains(t, err.Error(), "deadbeefcafe")
 	require.Contains(t, err.Error(), "[scrubbed]")
 
-	_, err = stream(server.URL + "/obj")
+	_, err = stream(server.URL+"/obj", 0)
 	require.ErrorContains(t, err, "SignatureDoesNotMatch")
 }
 
@@ -267,7 +376,7 @@ func TestAnErrorBodyIsBoundedInTheMessage(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	_, err := stream(server.URL + "/obj")
+	_, err := stream(server.URL+"/obj", 0)
 	require.Error(t, err)
 	require.Less(t, len(err.Error()), 2048+128)
 }

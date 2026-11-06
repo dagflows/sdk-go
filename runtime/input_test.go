@@ -92,7 +92,14 @@ func inline(data any, contentType ContentType) *Input[any] {
 	}
 }
 
-func reference(base, path string, contentType ContentType, size int64, memoryLimitMB int) *Input[any] {
+// reference is a stored input served at path, its recorded size that body's
+// length.
+func reference(base, path string, contentType ContentType, memoryLimitMB int) *Input[any] {
+	return referenceSized(base, path, contentType, int64(len(bodies[path])), memoryLimitMB)
+}
+
+// referenceSized is a stored input served at path with size recorded for it.
+func referenceSized(base, path string, contentType ContentType, size int64, memoryLimitMB int) *Input[any] {
 	return &Input[any]{
 		key: "x",
 		entry: map[string]any{
@@ -132,7 +139,7 @@ func TestTheSameNodeCodeReadsTheSameEitherSideOfTheThreshold(t *testing.T) {
 		{CSV, "/rows.csv"},
 	} {
 		small := collect(t, inline(inputRows, tc.contentType).Iter())
-		large := collect(t, reference(base, tc.path, tc.contentType, 1, 0).Iter())
+		large := collect(t, reference(base, tc.path, tc.contentType, 0).Iter())
 
 		require.Equal(t, inputRows, small)
 		require.Equal(t, asText(small), asText(large), tc.contentType)
@@ -145,7 +152,7 @@ func TestAnInlineValueIteratesOnceRatherThanOverItsKeys(t *testing.T) {
 
 func TestAReferenceJSONArrayStreams(t *testing.T) {
 	base, _ := newInputServer(t)
-	require.Equal(t, inputRows, collect(t, reference(base, "/rows.json", JSON, 1, 0).Iter()))
+	require.Equal(t, inputRows, collect(t, reference(base, "/rows.json", JSON, 0).Iter()))
 }
 
 func TestAReferenceJSONObjectIsRefusedByName(t *testing.T) {
@@ -153,7 +160,7 @@ func TestAReferenceJSONObjectIsRefusedByName(t *testing.T) {
 
 	var failure error
 
-	for _, err := range reference(base, "/object.json", JSON, 1, 0).Iter() {
+	for _, err := range reference(base, "/object.json", JSON, 0).Iter() {
 		failure = err
 	}
 
@@ -165,7 +172,7 @@ func TestBinaryHasNoRecordsAndSaysSo(t *testing.T) {
 
 	var failure error
 
-	for _, err := range reference(base, "/blob.bin", BYTES, 1, 0).Iter() {
+	for _, err := range reference(base, "/blob.bin", BYTES, 0).Iter() {
 		failure = err
 	}
 
@@ -175,7 +182,7 @@ func TestBinaryHasNoRecordsAndSaysSo(t *testing.T) {
 	require.Contains(t, failure.Error(), ".bytes()")
 	require.Zero(t, stats.gets.Load(), "the refusal must not cost a download")
 
-	_, err := reference(base, "/blob.bin", BYTES, 1, 0).Value()
+	_, err := reference(base, "/blob.bin", BYTES, 0).Value()
 	require.ErrorAs(t, err, &unavailable)
 	require.Contains(t, err.Error(), "not JSON; read it with .bytes()")
 }
@@ -197,7 +204,7 @@ func readBytes(t *testing.T, handle *Input[any]) []byte {
 func TestBytesIsTotal(t *testing.T) {
 	base, _ := newInputServer(t)
 
-	require.Equal(t, bodies["/blob.bin"], readBytes(t, reference(base, "/blob.bin", BYTES, 1, 0)))
+	require.Equal(t, bodies["/blob.bin"], readBytes(t, reference(base, "/blob.bin", BYTES, 0)))
 	require.JSONEq(t, `{"a": 1}`, string(readBytes(t, inline(map[string]any{"a": 1}, JSON))))
 	require.Equal(t, "hello", string(readBytes(t, inline("hello", TEXT))))
 	require.Equal(t, `"hello"`, string(readBytes(t, inline("hello", JSON))))
@@ -206,19 +213,19 @@ func TestBytesIsTotal(t *testing.T) {
 func TestASmallReferenceStillMaterialises(t *testing.T) {
 	base, _ := newInputServer(t)
 
-	value, err := reference(base, "/rows.ndjson", NDJSON, 1, 0).Value()
+	value, err := reference(base, "/rows.ndjson", NDJSON, 0).Value()
 	require.NoError(t, err)
 	require.Equal(t, inputRows, value)
 
-	value, err = reference(base, "/rows.json", JSON, 1, 512).Value()
+	value, err = reference(base, "/rows.json", JSON, 512).Value()
 	require.NoError(t, err)
 	require.Equal(t, inputRows, value)
 
-	value, err = reference(base, "/text.txt", TEXT, 1, 512).Value()
+	value, err = reference(base, "/text.txt", TEXT, 512).Value()
 	require.NoError(t, err)
 	require.Equal(t, "hello\nworld", value)
 
-	value, err = reference(base, "/rows.csv", CSV, 1, 512).Value()
+	value, err = reference(base, "/rows.csv", CSV, 512).Value()
 	require.NoError(t, err)
 	require.Equal(t, []any{
 		map[string]any{"id": "1", "name": "ana"},
@@ -228,19 +235,35 @@ func TestASmallReferenceStillMaterialises(t *testing.T) {
 
 func TestAValueThatWouldNotFitIsRefusedBeforeItIsFetched(t *testing.T) {
 	base, stats := newInputServer(t)
-	handle := reference(base, "/rows.ndjson", NDJSON, 100*1024*1024, 512)
+	handle := referenceSized(base, "/rows.ndjson", NDJSON, 100*1024*1024, 512)
 
 	_, err := handle.Value()
 	require.True(t, errors.Is(err, &InputTooLarge{}))
 	require.Zero(t, stats.gets.Load(), "the refusal must not cost a download")
 
-	// Iterating provides memory-safe row access without full buffering.
-	require.Equal(t, inputRows, collect(t, handle.Iter()))
+	// Iterating provides memory-safe row access without full buffering, to an
+	// input truly too big to hold, of the size recorded for it.
+	big := reference(base, "/big.ndjson", NDJSON, 512)
+
+	_, err = big.Value()
+	require.True(t, errors.Is(err, &InputTooLarge{}), "the big body must be too big to hold, or this proves nothing")
+
+	var first []any
+
+	for row, err := range big.Iter() {
+		require.NoError(t, err)
+
+		if first = append(first, row); len(first) == 3 {
+			break
+		}
+	}
+
+	require.Equal(t, map[string]any{"i": json.Number("0")}, first[0])
 }
 
 func TestIterationIsReEntrantRatherThanASpentGenerator(t *testing.T) {
 	base, stats := newInputServer(t)
-	handle := reference(base, "/rows.ndjson", NDJSON, 1, 0)
+	handle := reference(base, "/rows.ndjson", NDJSON, 0)
 
 	first := collect(t, handle.Iter())
 	second := collect(t, handle.Iter())
@@ -252,7 +275,7 @@ func TestIterationIsReEntrantRatherThanASpentGenerator(t *testing.T) {
 
 func TestStoppingEarlyDoesNotPayForTheRest(t *testing.T) {
 	base, stats := newInputServer(t)
-	handle := reference(base, "/big.ndjson", NDJSON, 1, 0)
+	handle := reference(base, "/big.ndjson", NDJSON, 0)
 
 	for row, err := range handle.Iter() {
 		require.NoError(t, err)
@@ -267,14 +290,14 @@ func TestStoppingEarlyDoesNotPayForTheRest(t *testing.T) {
 func TestAReferenceWithARowTypeIsAListWhenAskedForAValue(t *testing.T) {
 	base, _ := newInputServer(t)
 
-	value, err := reference(base, "/rows.ndjson", NDJSON, 1, 0).Value()
+	value, err := reference(base, "/rows.ndjson", NDJSON, 0).Value()
 	require.NoError(t, err)
 	require.Len(t, value, 2)
 }
 
 func TestMaterialisingTwiceCostsOneDownload(t *testing.T) {
 	base, stats := newInputServer(t)
-	handle := reference(base, "/rows.ndjson", NDJSON, 1, 0)
+	handle := reference(base, "/rows.ndjson", NDJSON, 0)
 
 	value, err := handle.Value()
 	require.NoError(t, err)
@@ -289,7 +312,7 @@ func TestMaterialisingTwiceCostsOneDownload(t *testing.T) {
 
 func TestACachedJSONObjectStillRefusesToIterate(t *testing.T) {
 	base, _ := newInputServer(t)
-	handle := reference(base, "/object.json", JSON, 1, 0)
+	handle := reference(base, "/object.json", JSON, 0)
 
 	_, err := handle.Value()
 	require.NoError(t, err)
@@ -306,7 +329,7 @@ func TestACachedJSONObjectStillRefusesToIterate(t *testing.T) {
 func TestAMissingReferenceIsAnInfrastructureFailure(t *testing.T) {
 	base, _ := newInputServer(t)
 
-	_, err := reference(base, "/absent.ndjson", NDJSON, 1, 0).Value()
+	_, err := reference(base, "/absent.ndjson", NDJSON, 0).Value()
 	fail, ok := errors.AsType[*Fail](err)
 	require.True(t, ok, "%v", err)
 	require.Equal(t, INFRASTRUCTURE, fail.Category)

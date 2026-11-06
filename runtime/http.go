@@ -71,6 +71,16 @@ func unreachable(rawURL string, err error) error {
 	}
 }
 
+// notAsRecorded is a body that is not the length recorded for it, as a
+// retryable infrastructure failure.
+func notAsRecorded(rawURL, what string) error {
+	return &Fail{
+		Message:  fmt.Sprintf("reading %s failed: %s", safe(rawURL), what),
+		Category: INFRASTRUCTURE,
+		Abort:    new(false),
+	}
+}
+
 // uploadedNothing wraps upload errors as retryable infrastructure failures.
 func uploadedNothing(rawURL string, err error) error {
 	return &Fail{
@@ -144,8 +154,10 @@ func (b *idleBody) Read(p []byte) (int, error) {
 	return b.ReadCloser.Read(p)
 }
 
-// stream initiates a GET request and returns a stream reader.
-func stream(rawURL string) (io.ReadCloser, error) {
+// stream initiates a GET request and returns a stream reader. A body of size
+// bytes, when size is above zero, fails as the platform's, to be retried,
+// should it end short of it or run past it.
+func stream(rawURL string, size int64) (io.ReadCloser, error) {
 	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, unreachable(rawURL, err)
@@ -160,19 +172,32 @@ func stream(rawURL string) (io.ReadCloser, error) {
 		body: resp.Body,
 		stop: stop,
 		url:  rawURL,
+		size: size,
 	}, nil
 }
 
-// streamBody maps read errors to infrastructure failures and cleans up the watchdog on close.
+// streamBody maps read errors to infrastructure failures, holds the body to the
+// size recorded for it, and cleans up the watchdog on close.
 type streamBody struct {
 	body io.ReadCloser
 	stop func()
 	url  string
+	// size is the body's recorded size, 0 when none was recorded, and read is
+	// how much of it was read.
+	size int64
+	read int64
 }
 
 func (s *streamBody) Read(p []byte) (int, error) {
 	n, err := s.body.Read(p)
-	if err != nil && err != io.EOF {
+	s.read += int64(n)
+
+	switch {
+	case s.size > 0 && s.read > s.size:
+		return n, notAsRecorded(s.url, fmt.Sprintf("it ran past the %d bytes recorded for it", s.size))
+	case err == io.EOF && s.size > 0 && s.read < s.size:
+		return n, notAsRecorded(s.url, fmt.Sprintf("it ended after %d of its %d bytes", s.read, s.size))
+	case err != nil && err != io.EOF:
 		return n, unreachable(s.url, err)
 	}
 
