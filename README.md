@@ -379,11 +379,13 @@ Laziness on its own does not bound what the node holds. Declare `Transfer{MaxOut
 
 ```go
 wf.Node(exportAll, fetched, df.NodeOptions{
-	Transfer: &df.Transfer{MaxOutputMB: 4096},
+	Transfer: &df.Transfer{MaxOutputMB: 2048},
 })
 ```
 
 Without it a large output is refused rather than truncated, naming `max_output_mb` as the remedy.
+
+An output may store at most the lowest of its plan's limit for one node's output (64 MiB, 512 MiB and 2 GiB on Free, Hobby and Pro), its `max_output_mb`, and the room left in its organization's storage. The platform states it as `ctx.MaxOutputBytes`, and an output over it is refused before it is uploaded. While the organization's storage is full, `ctx.StorageFull` is set and only an output small enough to return inline is kept.
 
 To decide routing from what was streamed, write through `ctx.Out`:
 

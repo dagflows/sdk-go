@@ -299,7 +299,7 @@ func TestAWriterThatFailsAbortsToo(t *testing.T) {
 
 func TestAnEmptyUploadIsAbortedNotCompleted(t *testing.T) {
 	base, store := newPartStore(t)
-	uploader := NewPartUploader(uploadOf(base, 2), NDJSON)
+	uploader := NewPartUploader(uploadOf(base, 2), NDJSON, 0)
 
 	size, err := uploader.Finish()
 	require.NoError(t, err)

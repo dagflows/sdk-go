@@ -70,6 +70,13 @@ type Ctx struct {
 	OutputKey       string
 	// MaxOutputMB is how much this node may emit, 0 when it declared nothing.
 	MaxOutputMB int64
+	// MaxOutputBytes is the most this node's output may store: its plan's limit
+	// for one node's output, lowered by its max_output_mb and by the room left in
+	// its organization's storage. 0 when the platform sent none.
+	MaxOutputBytes int64
+	// StorageFull says the organization's storage is full, so this run was given
+	// nowhere to store an output: one too big to return inline is refused.
+	StorageFull bool
 	// ConnTimeoutMs and IdleTimeoutMs bound one network operation each,
 	// never the whole transfer.
 	ConnTimeoutMs int64
@@ -107,6 +114,7 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 	}
 
 	background, cancel := context.WithCancelCause(context.Background())
+	storageFull, _ := raw["storage_full"].(bool)
 
 	return &Ctx{
 		WorkflowRunID:   Str(raw["workflow_run_id"]),
@@ -123,6 +131,8 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 		InlineMaxBytes:  int(Num(raw["inline_max_bytes"], DefaultInlineMaxBytes)),
 		OutputUploadURL: Str(raw["output_upload_url"]),
 		OutputKey:       Str(raw["output_key"]),
+		MaxOutputBytes:  int64(Num(raw["max_output_bytes"], 0)),
+		StorageFull:     storageFull,
 		// A host that sent no transfer block is a local run; the defaults here
 		// stand in for what the platform always states.
 		MaxOutputMB:   int64(Num(transfer["max_output_mb"], 0)),
@@ -253,8 +263,10 @@ func (c *Ctx) OutputStream(contentType ContentType) *OutputStream {
 
 func (c *Ctx) upload() *Upload {
 	return &Upload{
-		URL: c.OutputUploadURL,
-		Key: c.OutputKey,
+		URL:         c.OutputUploadURL,
+		Key:         c.OutputKey,
+		MaxBytes:    c.MaxOutputBytes,
+		StorageFull: c.StorageFull,
 	}
 }
 

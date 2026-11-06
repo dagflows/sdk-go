@@ -53,16 +53,21 @@ func (m *Multipart) Capacity() int64 {
 type PartUploader struct {
 	upload      *Multipart
 	contentType ContentType
-	buffer      bytes.Buffer
-	etags       []string
-	sent        int64
+	// maxBytes is the most the output may store, 0 for no limit.
+	maxBytes int64
+	buffer   bytes.Buffer
+	etags    []string
+	sent     int64
 }
 
-// NewPartUploader creates a new multipart uploader instance.
-func NewPartUploader(upload *Multipart, contentType ContentType) *PartUploader {
+// NewPartUploader creates a new multipart uploader instance, which refuses a
+// part that would take the output past maxBytes before sending it, 0 for no
+// limit.
+func NewPartUploader(upload *Multipart, contentType ContentType, maxBytes int64) *PartUploader {
 	return &PartUploader{
 		upload:      upload,
 		contentType: contentType,
+		maxBytes:    maxBytes,
 	}
 }
 
@@ -126,6 +131,16 @@ func (p *PartUploader) Abort() {
 
 func (p *PartUploader) send(body []byte) error {
 	number := len(p.etags) + 1
+
+	if passed := p.sent + int64(len(body)); p.maxBytes > 0 && passed > p.maxBytes {
+		return &OutputTooLarge{
+			Message: fmt.Sprintf(
+				"the node's output passed the %d bytes it may store, the lowest of its plan's limit for one node's output, "+
+					"its max_output_mb and the room left in its organization's storage",
+				p.maxBytes,
+			),
+		}
+	}
 
 	if number > len(p.upload.PartURLs) {
 		return &OutputTooLarge{

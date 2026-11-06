@@ -54,11 +54,53 @@ func IsResult(value any) bool {
 type Upload struct {
 	URL string
 	Key string
+	// MaxBytes is the most the output may store, 0 for no limit sent.
+	MaxBytes int64
+	// StorageFull says the organization's storage is full, so nothing can be
+	// stored.
+	StorageFull bool
 }
 
 // Offered reports whether this run was given somewhere to upload.
 func (u *Upload) Offered() bool {
 	return u != nil && u.URL != "" && u.Key != ""
+}
+
+// refuseFull refuses an output that must be stored while the organization's
+// storage is full.
+func (u *Upload) refuseFull() error {
+	if u == nil || !u.StorageFull {
+		return nil
+	}
+
+	return &OutputTooLarge{
+		Message: "the organization's storage is full, so the node's output must be small enough to return inline, " +
+			"until retention deletes older data or its plan or storage settings let it store more",
+	}
+}
+
+// refuseOver refuses size bytes over the most the output may store.
+func (u *Upload) refuseOver(size int64) error {
+	if u == nil || u.MaxBytes <= 0 || size <= u.MaxBytes {
+		return nil
+	}
+
+	return &OutputTooLarge{
+		Message: fmt.Sprintf(
+			"the node's output is %d bytes, over the %d bytes it may store, the lowest of its plan's limit for one node's output, "+
+				"its max_output_mb and the room left in its organization's storage",
+			size, u.MaxBytes,
+		),
+	}
+}
+
+// maxBytes is the most the output may store, 0 for no limit.
+func (u *Upload) maxBytes() int64 {
+	if u == nil {
+		return 0
+	}
+
+	return u.MaxBytes
 }
 
 // Written represents the final output block produced by a closed OutputStream.
@@ -244,8 +286,13 @@ func bufferCap(limit int64, upload *Upload, memoryLimitMB int) int64 {
 	return limit
 }
 
-// offload uploads payload to presigned storage and returns a REFERENCE block.
+// offload uploads payload to presigned storage and returns a REFERENCE block,
+// once it is known to be no more than the output may store.
 func offload(data any, contentType ContentType, inlineSize, limit int64, upload *Upload) (*Block, error) {
+	if err := upload.refuseFull(); err != nil {
+		return nil, err
+	}
+
 	if !upload.Offered() {
 		return nil, &OutputTooLarge{
 			Message: fmt.Sprintf(
@@ -265,6 +312,10 @@ func offload(data any, contentType ContentType, inlineSize, limit int64, upload 
 	}
 
 	if err != nil {
+		return nil, err
+	}
+
+	if err := upload.refuseOver(int64(len(body))); err != nil {
 		return nil, err
 	}
 
@@ -375,6 +426,12 @@ func (s *RowSink) Add(row any) error {
 		return nil
 	}
 
+	// Rows past the inline limit must be stored, which a full storage refuses
+	// at once, before any more are held.
+	if err := s.upload.refuseFull(); err != nil {
+		return err
+	}
+
 	if s.multipart != nil {
 		return s.spill()
 	}
@@ -430,7 +487,7 @@ func (s *RowSink) Abort() {
 // re-encoding the rows collected so far.
 func (s *RowSink) spill() error {
 	s.encoder = NewRowEncoder(s.contentType)
-	s.uploader = NewPartUploader(s.multipart, s.contentType)
+	s.uploader = NewPartUploader(s.multipart, s.contentType, s.upload.maxBytes())
 
 	for _, held := range s.collected {
 		encoded, err := s.encoder.Encode(held)

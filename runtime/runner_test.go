@@ -221,6 +221,32 @@ func TestTheRunSuppliedThresholdIsUsed(t *testing.T) {
 	require.Equal(t, "SUCCESS", result["status"])
 }
 
+func TestAFullStorageFailsANodeWhoseOutputMustBeStored(t *testing.T) {
+	result := node(t, func(*Ctx, *Inputs) (any, error) {
+		return map[string]any{"blob": strings.Repeat("x", 4096)}, nil
+	}, map[string]any{"inline_max_bytes": 512, "storage_full": true}, nil)
+
+	require.Equal(t, "FAILED", result["status"])
+	require.Contains(t, result["error"].(map[string]any)["message"], "the organization's storage is full")
+}
+
+func TestAnOutputOverWhatItMayStoreFailsTheNodeBeforeItsUpload(t *testing.T) {
+	base, puts := countedStorage(t)
+
+	result := node(t, func(*Ctx, *Inputs) (any, error) {
+		return map[string]any{"blob": strings.Repeat("x", 4096)}, nil
+	}, map[string]any{
+		"inline_max_bytes":  512,
+		"output_upload_url": base + "/put",
+		"output_key":        "node-outputs/run/n/0",
+		"max_output_bytes":  1000,
+	}, nil)
+
+	require.Equal(t, "FAILED", result["status"])
+	require.Contains(t, result["error"].(map[string]any)["message"], "over the 1000 bytes it may store")
+	require.Zero(t, puts.Load(), "nothing was uploaded")
+}
+
 func TestAStreamedResultInlinesWhenItIsSmall(t *testing.T) {
 	result := node(t, func(*Ctx, *Inputs) (any, error) {
 		return Result[any]{
