@@ -36,9 +36,9 @@ func (c *Execution) validate() error {
 
 // Transfer is the data transfer and storage offloading configuration for a node.
 type Transfer struct {
-	// MaxOutputMB is how much this node expects to emit, in megabytes. Leaving
-	// it out asks for no multipart upload, which is not the same as asking for
-	// zero.
+	// MaxOutputMB is how much this node expects to emit, in megabytes.
+	// Declaring it lets an output stream as it is written rather than being
+	// held for one upload. Leaving it out is not the same as asking for zero.
 	MaxOutputMB int
 	// ConnTimeoutSecs bounds establishing a connection, in seconds.
 	ConnTimeoutSecs int

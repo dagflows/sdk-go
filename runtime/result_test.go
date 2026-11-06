@@ -16,7 +16,7 @@ const big = 1 << 20
 func envelope(t *testing.T, value any, inlineMaxBytes int) *Envelope {
 	t.Helper()
 
-	out, err := ToEnvelope(value, inlineMaxBytes, nil, 0, nil)
+	out, err := ToEnvelope(value, inlineMaxBytes, nil, 0)
 	require.NoError(t, err)
 
 	return out
@@ -90,10 +90,10 @@ func TestAbsentRoutingMeansEveryChild(t *testing.T) {
 }
 
 func TestABlankRoutingKeyIsRefused(t *testing.T) {
-	_, err := ToEnvelope(Result[any]{Output: map[string]any{}, Next: []string{""}}, big, nil, 0, nil)
+	_, err := ToEnvelope(Result[any]{Output: map[string]any{}, Next: []string{""}}, big, nil, 0)
 	require.ErrorContains(t, err, "Stop: true")
 
-	_, err = ToEnvelope(Result[any]{Output: map[string]any{}, Next: []string{"ok", "  "}}, big, nil, 0, nil)
+	_, err = ToEnvelope(Result[any]{Output: map[string]any{}, Next: []string{"ok", "  "}}, big, nil, 0)
 	require.ErrorContains(t, err, "Stop: true")
 }
 
@@ -147,7 +147,7 @@ func TestATypedIteratorErrorFailsTheNode(t *testing.T) {
 		yield(nil, boom)
 	}
 
-	_, err := ToEnvelope(failing, big, nil, 0, nil)
+	_, err := ToEnvelope(failing, big, nil, 0)
 	require.ErrorIs(t, err, boom)
 }
 
@@ -169,7 +169,7 @@ func TestASingleValueWithARowTypeIsOneRow(t *testing.T) {
 }
 
 func TestALazyIteratorCannotBeAJSONValue(t *testing.T) {
-	_, err := ToEnvelope(Result[any]{Output: lazy(1, 2), ContentType: JSON}, big, nil, 0, nil)
+	_, err := ToEnvelope(Result[any]{Output: lazy(1, 2), ContentType: JSON}, big, nil, 0)
 	require.ErrorContains(t, err, "materialise it with slices.Collect")
 }
 
@@ -178,11 +178,11 @@ func TestTextTravelsAsAString(t *testing.T) {
 }
 
 func TestRawBytesMustBeUploaded(t *testing.T) {
-	_, err := ToEnvelope([]byte{0, 1}, big, nil, 0, nil)
+	_, err := ToEnvelope([]byte{0, 1}, big, nil, 0)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 	require.ErrorContains(t, err, "cannot travel in the JSON envelope")
 
-	_, err = ToEnvelope(Result[any]{Output: []byte{0, 1}, ContentType: NDJSON}, big, nil, 0, nil)
+	_, err = ToEnvelope(Result[any]{Output: []byte{0, 1}, ContentType: NDJSON}, big, nil, 0)
 	require.ErrorContains(t, err, "cannot travel in the JSON envelope")
 }
 
@@ -204,7 +204,7 @@ func TestZeroValuedDataIsStillCarried(t *testing.T) {
 }
 
 func TestCrossingTheThresholdNamesBothNumbers(t *testing.T) {
-	_, err := ToEnvelope(map[string]any{"blob": strings.Repeat("x", 200)}, 64, nil, 0, nil)
+	_, err := ToEnvelope(map[string]any{"blob": strings.Repeat("x", 200)}, 64, nil, 0)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 	require.ErrorContains(t, err, "64")
 	require.ErrorContains(t, err, "nowhere to upload it")
@@ -223,7 +223,7 @@ func TestRowsStopBeingCollectedOnceTheyCannotBeInline(t *testing.T) {
 		}
 	}
 
-	_, err := ToEnvelope(iter.Seq[any](rows), 1024, nil, 0, nil)
+	_, err := ToEnvelope(iter.Seq[any](rows), 1024, nil, 0)
 	require.ErrorContains(t, err, "after")
 	require.Less(t, consumed, 100, "consumed %d rows past a 1KB limit", consumed)
 }
@@ -232,7 +232,7 @@ func TestTheThresholdIsNeverHardcoded(t *testing.T) {
 	payload := map[string]any{"blob": strings.Repeat("x", 200)}
 	require.Equal(t, payload, envelope(t, payload, 4096).Output.Data)
 
-	_, err := ToEnvelope(payload, 64, nil, 0, nil)
+	_, err := ToEnvelope(payload, 64, nil, 0)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 }
 
@@ -249,7 +249,7 @@ func TestAMissingLimitIsTheDefaultNotUnlimited(t *testing.T) {
 		}
 	}
 
-	_, err := ToEnvelope(iter.Seq[any](endless), 0, nil, 0, nil)
+	_, err := ToEnvelope(iter.Seq[any](endless), 0, nil, 0)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 	require.Less(t, consumed, DefaultInlineMaxBytes/100)
 }
@@ -261,7 +261,7 @@ func TestSizeIsMeasuredInBytesNotCharacters(t *testing.T) {
 
 	require.Equal(t, payload, envelope(t, payload, exact).Output.Data)
 
-	_, err := ToEnvelope(payload, exact-1, nil, 0, nil)
+	_, err := ToEnvelope(payload, exact-1, nil, 0)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 }
 
@@ -271,7 +271,7 @@ func TestRowCollectionCountsTheArrayPunctuation(t *testing.T) {
 
 	require.Equal(t, rows, envelope(t, lazy(rows...), exact).Output.Data)
 
-	_, err := ToEnvelope(lazy(rows...), exact-1, nil, 0, nil)
+	_, err := ToEnvelope(lazy(rows...), exact-1, nil, 0)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 	require.ErrorContains(t, err, "after 3 rows")
 }
@@ -332,7 +332,7 @@ func TestRowOutputRefusesBeforeItCouldExceedGuestMemory(t *testing.T) {
 		}
 	}
 
-	_, err := ToEnvelope(iter.Seq[any](rows), DefaultInlineMaxBytes, offered, memoryLimitMB, nil)
+	_, err := ToEnvelope(iter.Seq[any](rows), DefaultInlineMaxBytes, offered, memoryLimitMB)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 	require.ErrorContains(t, err, "max_output_mb")
 	require.LessOrEqual(
@@ -357,7 +357,7 @@ func must[T any](v T, err error) T {
 func TestAResultInTheRowPositionIsRefusedFromASequence(t *testing.T) {
 	_, err := ToEnvelope(
 		Result[any]{Output: []any{Result[any]{Output: map[string]any{"id": 1}}}, ContentType: NDJSON},
-		1<<20, nil, 0, nil,
+		1<<20, nil, 0,
 	)
 
 	require.ErrorContains(t, err, "a row cannot be a Result")
@@ -368,7 +368,7 @@ func TestAResultInTheRowPositionIsRefusedFromAnIterator(t *testing.T) {
 		yield(&Result[any]{Output: map[string]any{"id": 1}, Next: []string{"b"}})
 	})
 
-	_, err := ToEnvelope(Result[any]{Output: rows, ContentType: NDJSON}, 1<<20, nil, 0, nil)
+	_, err := ToEnvelope(Result[any]{Output: rows, ContentType: NDJSON}, 1<<20, nil, 0)
 
 	require.ErrorContains(t, err, "Per-row routing is not supported yet")
 }
@@ -376,7 +376,7 @@ func TestAResultInTheRowPositionIsRefusedFromAnIterator(t *testing.T) {
 func TestTheReturnedResultItselfIsLeftAlone(t *testing.T) {
 	envelope, err := ToEnvelope(
 		Result[any]{Output: []any{map[string]any{"id": 1}}, ContentType: NDJSON, Next: []string{"b"}},
-		1<<20, nil, 0, nil,
+		1<<20, nil, 0,
 	)
 
 	require.NoError(t, err)

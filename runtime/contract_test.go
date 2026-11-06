@@ -92,7 +92,7 @@ func TestTheSuccessEnvelopeMatchesTheContract(t *testing.T) {
 		Output: map[string]any{"total": 350},
 		Next:   []string{"process_payment", "notify"},
 		Meta:   map[string]any{"orders": 2},
-	}, 1<<20, nil, 0, nil)
+	}, 1<<20, nil, 0)
 	require.NoError(t, err)
 
 	encoded, err := compact(envelope)

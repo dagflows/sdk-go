@@ -68,6 +68,9 @@ type Ctx struct {
 	InlineMaxBytes  int
 	OutputUploadURL string
 	OutputKey       string
+	// OutputUploadStream says the upload may come in chunks with no length
+	// named, which the platform offers a node that declared max_output_mb.
+	OutputUploadStream bool
 	// MaxOutputMB is how much this node may emit, 0 when it declared nothing.
 	MaxOutputMB int64
 	// MaxOutputBytes is the most this node's output may store: its plan's limit
@@ -115,24 +118,26 @@ func CtxFromRaw(raw map[string]any) *Ctx {
 
 	background, cancel := context.WithCancelCause(context.Background())
 	storageFull, _ := raw["storage_full"].(bool)
+	uploadStream, _ := raw["output_upload_stream"].(bool)
 
 	return &Ctx{
-		WorkflowRunID:   Str(raw["workflow_run_id"]),
-		NodeKey:         Str(raw["node_key"]),
-		Language:        Str(raw["language"]),
-		RuntimeVersion:  Str(raw["runtime_version"]),
-		ABI:             Str(raw["abi"]),
-		Entrypoint:      Str(raw["entrypoint"]),
-		Config:          config,
-		TimeoutMs:       int64(Num(raw["timeout_ms"], 0)),
-		Attempt:         int(Num(raw["attempt"], 0)),
-		MemoryMB:        int(Num(raw["memory_mb"], 0)),
-		MilliCores:      int(Num(raw["milli_cores"], 0)),
-		InlineMaxBytes:  int(Num(raw["inline_max_bytes"], DefaultInlineMaxBytes)),
-		OutputUploadURL: Str(raw["output_upload_url"]),
-		OutputKey:       Str(raw["output_key"]),
-		MaxOutputBytes:  int64(Num(raw["max_output_bytes"], 0)),
-		StorageFull:     storageFull,
+		WorkflowRunID:      Str(raw["workflow_run_id"]),
+		NodeKey:            Str(raw["node_key"]),
+		Language:           Str(raw["language"]),
+		RuntimeVersion:     Str(raw["runtime_version"]),
+		ABI:                Str(raw["abi"]),
+		Entrypoint:         Str(raw["entrypoint"]),
+		Config:             config,
+		TimeoutMs:          int64(Num(raw["timeout_ms"], 0)),
+		Attempt:            int(Num(raw["attempt"], 0)),
+		MemoryMB:           int(Num(raw["memory_mb"], 0)),
+		MilliCores:         int(Num(raw["milli_cores"], 0)),
+		InlineMaxBytes:     int(Num(raw["inline_max_bytes"], DefaultInlineMaxBytes)),
+		OutputUploadURL:    Str(raw["output_upload_url"]),
+		OutputKey:          Str(raw["output_key"]),
+		OutputUploadStream: uploadStream,
+		MaxOutputBytes:     int64(Num(raw["max_output_bytes"], 0)),
+		StorageFull:        storageFull,
 		// A host that sent no transfer block is a local run; the defaults here
 		// stand in for what the platform always states.
 		MaxOutputMB:   int64(Num(transfer["max_output_mb"], 0)),
@@ -246,11 +251,6 @@ func (c *Ctx) Log() *slog.Logger {
 	return logger
 }
 
-// Multipart returns the presigned multipart upload configuration if available.
-func (c *Ctx) Multipart() *Multipart {
-	return multipartFromCtx(c.Raw["output_multipart"])
-}
-
 // Out returns the output writer, for a node that decides routing while it writes.
 func (c *Ctx) Out(contentType ContentType) *OutputStream {
 	return c.OutputStream(contentType)
@@ -258,7 +258,7 @@ func (c *Ctx) Out(contentType ContentType) *OutputStream {
 
 // OutputStream creates a streaming writer for nodes that emit dynamic output.
 func (c *Ctx) OutputStream(contentType ContentType) *OutputStream {
-	return NewOutputStream(contentType, c.InlineMaxBytes, c.upload(), c.MemoryMB, c.Multipart())
+	return NewOutputStream(contentType, c.InlineMaxBytes, c.upload(), c.MemoryMB)
 }
 
 func (c *Ctx) upload() *Upload {
@@ -267,6 +267,7 @@ func (c *Ctx) upload() *Upload {
 		Key:         c.OutputKey,
 		MaxBytes:    c.MaxOutputBytes,
 		StorageFull: c.StorageFull,
+		Stream:      c.OutputUploadStream,
 	}
 }
 

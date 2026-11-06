@@ -146,71 +146,33 @@ func TestAFailureNeverLogsTheSignature(t *testing.T) {
 	require.NotContains(t, err.Error(), "deadbeef")
 	require.Contains(t, err.Error(), "/obj")
 
-	_, err = put(closed+"/obj?X-Amz-Signature=deadbeef", []byte("{}"), JSON)
+	err = store(closed+"/obj?X-Amz-Signature=deadbeef", []byte("{}"), JSON)
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "deadbeef")
 }
 
-func TestAPutCarriesItsLengthAndContentType(t *testing.T) {
+func TestAnUploadCarriesItsLengthAndContentType(t *testing.T) {
 	base, got := newStore(t, nil)
 	body := []byte(`{"value":42}`)
 
-	_, err := put(base+"/out", body, JSON)
+	err := store(base+"/out", body, JSON)
 	require.NoError(t, err)
 
 	seen := got.snapshot()
 	require.Equal(t, body, seen.body)
-	require.Equal(t, "12", seen.length, "S3 and R2 refuse a chunked presigned PUT")
+	require.Equal(t, "12", seen.length, "a value names its length")
 	require.Equal(t, JSON, seen.contentType)
-}
-
-func TestAPutReturnsTheETag(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("ETag", `"abc"`)
-	}))
-	t.Cleanup(server.Close)
-
-	etag, err := put(server.URL+"/part", []byte("x"), BYTES)
-	require.NoError(t, err)
-	require.Equal(t, `"abc"`, etag)
 }
 
 func TestAFailedUploadIsReportedAsInfrastructure(t *testing.T) {
 	base, _ := newStore(t, nil)
 
-	_, err := put(base+"/boom", []byte("{}"), JSON)
+	err := store(base+"/boom", []byte("{}"), JSON)
 	fail, ok := errors.AsType[*Fail](err)
 	require.True(t, ok, "%v", err)
 	require.Equal(t, INFRASTRUCTURE, fail.Category)
 	require.False(t, *fail.Abort)
 	require.Contains(t, fail.Message, "output")
-}
-
-func TestPostReturnsTheResponseAndDeleteNeverFails(t *testing.T) {
-	var deleted bool
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			raw, _ := io.ReadAll(r.Body)
-			w.Write(append([]byte("echo:"), raw...))
-
-		case http.MethodDelete:
-			deleted = true
-			w.WriteHeader(http.StatusNoContent)
-		}
-	}))
-	t.Cleanup(server.Close)
-
-	answer, err := post(server.URL+"/complete", []byte("<x/>"), "application/xml")
-	require.NoError(t, err)
-	require.Equal(t, "echo:<x/>", string(answer))
-
-	del(server.URL + "/abort")
-	require.True(t, deleted)
-
-	del("http://127.0.0.1:1/nowhere")
-	del("::not a url::")
 }
 
 func withTimeout(t *testing.T, d time.Duration) {
@@ -288,7 +250,7 @@ func TestAnErrorStatusCarriesTheProvidersDiagnosisWithTheSignatureScrubbed(t *te
 	}))
 	t.Cleanup(server.Close)
 
-	_, err := put(server.URL+"/obj?X-Amz-Signature=deadbeefcafe&X-Amz-Expires=900", []byte("{}"), JSON)
+	err := store(server.URL+"/obj?X-Amz-Signature=deadbeefcafe&X-Amz-Expires=900", []byte("{}"), JSON)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "HTTP 403 Forbidden: <Error><Code>SignatureDoesNotMatch</Code>")
 	require.NotContains(t, err.Error(), "deadbeefcafe")

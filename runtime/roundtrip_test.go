@@ -75,7 +75,6 @@ func produce(t *testing.T, base string, rows []any, contentType ContentType, inl
 			Key: "node-outputs/run/producer/0",
 		},
 		512,
-		nil,
 	)
 	require.NoError(t, err)
 
@@ -168,7 +167,7 @@ func TestAnUploadedJSONValueReadsBackAsItself(t *testing.T) {
 	env, err := ToEnvelope(payload, 64, &Upload{
 		URL: base + "/obj",
 		Key: "k",
-	}, 0, nil)
+	}, 0)
 	require.NoError(t, err)
 	require.Equal(t, REFERENCE, env.Output.Type)
 	require.Equal(t, JSON, env.Output.ContentType)
@@ -191,7 +190,7 @@ func TestTextRoundTripsThroughStorage(t *testing.T) {
 	}, 16, &Upload{
 		URL: base + "/obj",
 		Key: "k",
-	}, 0, nil)
+	}, 0)
 	require.NoError(t, err)
 	require.Equal(t, REFERENCE, env.Output.Type)
 

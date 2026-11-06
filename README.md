@@ -233,7 +233,7 @@ func main() {
 }
 ```
 
-Use `Machine` to select a resource tier from the platform catalog (e.g. `"gp-1"`, `"gp-2"`, `"gp-4"`, `"gp-8"`, `"gp-16"`). The name carries the memory in GB, so `gp-8` is the 8 GB tier. Set `TimeoutSecs` to cap node execution duration in seconds, and declare `MaxOutputMB` if your node needs multipart upload capabilities for large outputs.
+Use `Machine` to select a resource tier from the platform catalog (e.g. `"gp-1"`, `"gp-2"`, `"gp-4"`, `"gp-8"`, `"gp-16"`). The name carries the memory in GB, so `gp-8` is the 8 GB tier. Set `TimeoutSecs` to cap node execution duration in seconds, and declare `MaxOutputMB` if your node streams outputs too large to hold in memory.
 
 `MaxAttempts` counts the first run, so `1` means a failure after your code started is not retried. Backoff doubles per attempt up to `MaxBackoffMs`.
 
@@ -375,7 +375,7 @@ Two rules apply to a rows output:
 - **One yield is one row.** The output is NDJSON, even where a sequence yields a single value once. Return the value itself when a node produces one.
 - **A rows node is atomic.** A failure at row 900 replays from row 0; rows already sent are discarded, never resumed.
 
-Laziness on its own does not bound what the node holds. Declare `Transfer{MaxOutputMB: ...}` for that: it is what asks the platform for a multipart upload, which is what lets parts leave as they fill instead of the whole output being buffered for a single request.
+Laziness on its own does not bound what the node holds. Declare `Transfer{MaxOutputMB: ...}` for that: it is what lets the rows leave as they are written, in one streamed upload, instead of the whole output being buffered for a single request.
 
 ```go
 wf.Node(exportAll, fetched, df.NodeOptions{

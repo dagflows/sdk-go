@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"errors"
 	"iter"
 	"net/http"
@@ -50,7 +51,7 @@ func TestAValueOverWhatItMayStoreIsRefusedBeforeItsUpload(t *testing.T) {
 	upload := &Upload{URL: base + "/put", Key: "node-outputs/run/export/0", MaxBytes: 1000}
 	value := map[string]any{"blob": strings.Repeat("x", 2000)}
 
-	_, err := ToEnvelope(value, 64, upload, 0, nil)
+	_, err := ToEnvelope(value, 64, upload, 0)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 	require.ErrorContains(t, err, "over the 1000 bytes it may store")
 	require.ErrorContains(t, err, "max_output_mb")
@@ -59,7 +60,7 @@ func TestAValueOverWhatItMayStoreIsRefusedBeforeItsUpload(t *testing.T) {
 	encoded, err := encodeValue(value, JSON)
 	require.NoError(t, err)
 	upload.MaxBytes = int64(len(encoded))
-	env, err := ToEnvelope(value, 64, upload, 0, nil)
+	env, err := ToEnvelope(value, 64, upload, 0)
 	require.NoError(t, err)
 	require.Equal(t, REFERENCE, env.Output.Type)
 	require.EqualValues(t, 1, puts.Load(), "the most it may store is stored")
@@ -70,11 +71,11 @@ func TestAValueOverWhatItMayStoreIsRefusedBeforeItsUpload(t *testing.T) {
 func TestAFullStorageRefusesOnlyAnOutputThatMustBeStored(t *testing.T) {
 	full := &Upload{StorageFull: true}
 
-	env, err := ToEnvelope(map[string]any{"ok": true}, 64, full, 512, nil)
+	env, err := ToEnvelope(map[string]any{"ok": true}, 64, full, 512)
 	require.NoError(t, err)
 	require.Equal(t, INLINE, env.Output.Type)
 
-	_, err = ToEnvelope(map[string]any{"blob": strings.Repeat("x", 200)}, 64, full, 512, nil)
+	_, err = ToEnvelope(map[string]any{"blob": strings.Repeat("x", 200)}, 64, full, 512)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 	require.ErrorContains(t, err, "the organization's storage is full")
 }
@@ -93,7 +94,7 @@ func TestRowsStopAtTheInlineLimitWhileTheStorageIsFull(t *testing.T) {
 		}
 	}
 
-	_, err := ToEnvelope(iter.Seq[any](rows), 1024, &Upload{StorageFull: true}, 512, nil)
+	_, err := ToEnvelope(iter.Seq[any](rows), 1024, &Upload{StorageFull: true}, 512)
 	require.ErrorContains(t, err, "the organization's storage is full")
 	require.Less(t, consumed, 100, "consumed %d rows past a 1KB limit", consumed)
 }
@@ -120,37 +121,39 @@ func TestTheWriterStopsAtTheInlineLimitWhileTheStorageIsFull(t *testing.T) {
 	require.ErrorContains(t, err, "the organization's storage is full")
 }
 
-// Tests that a streamed output stops at the most it may store: the part that
-// would pass it is not sent, and the upload is aborted.
+// Tests that a streamed output stops at the most it may store: the write that
+// would pass it is not sent, and the upload is abandoned, so none of it is
+// stored.
 func TestAStreamStopsAtWhatItMayStore(t *testing.T) {
-	base, store := newPartStore(t)
-	maxBytes := int64(2*partSize + 100)
+	url, c := newChannel(t)
+	maxBytes := int64(100*1024 + 100)
+	upload := streaming(url)
+	upload.MaxBytes = maxBytes
 
-	_, err := ToEnvelope(
-		Result[any]{Output: paddedRows(400), ContentType: NDJSON},
-		1024,
-		&Upload{URL: base + "/put", Key: "node-outputs/run/export/0", MaxBytes: maxBytes},
-		512,
-		uploadOf(base, 20),
-	)
+	_, err := ToEnvelope(Result[any]{Output: paddedRows(2000), ContentType: NDJSON}, 1024, upload, 512)
 	require.True(t, errors.Is(err, &OutputTooLarge{}))
 	require.ErrorContains(t, err, "passed the "+strconv.FormatInt(maxBytes, 10)+" bytes it may store")
-	require.LessOrEqual(t, int64(len(store.stored())), maxBytes, "no part past the most was sent")
-	require.True(t, store.aborted, "a refused upload is aborted")
+
+	got := c.one(t)
+	require.LessOrEqual(t, int64(len(got.body)), maxBytes, "nothing past the most was sent")
+	assertCut(t, got)
 }
 
 // Tests that a streamed output of exactly the most it may store is stored.
 func TestAStreamOfExactlyWhatItMayStoreIsStored(t *testing.T) {
-	base, store := newPartStore(t)
+	url, c := newChannel(t)
 	chunk := []byte(strings.Repeat("x", 999) + "\n")
-	uploader := NewPartUploader(uploadOf(base, 20), NDJSON, int64(30*len(chunk)))
+	stream := OpenStream(url, NDJSON, int64(30*len(chunk)))
 
 	for range 30 {
-		require.NoError(t, uploader.Write(chunk))
+		require.NoError(t, stream.Write(chunk))
 	}
 
-	size, err := uploader.Finish()
+	size, err := stream.Finish()
 	require.NoError(t, err)
 	require.EqualValues(t, 30*len(chunk), size)
-	require.NotNil(t, store.completed)
+
+	got := c.one(t)
+	require.True(t, got.ended)
+	require.Equal(t, bytes.Repeat(chunk, 30), got.body)
 }

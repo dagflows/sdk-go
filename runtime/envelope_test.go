@@ -277,38 +277,19 @@ func TestKeysAreSortedAndLenCounts(t *testing.T) {
 	require.Equal(t, INLINE, mustGet(t, inputs, "c").Type())
 }
 
-func TestNoMultipartInCtxReadsAsNil(t *testing.T) {
-	require.Nil(t, (&Ctx{}).Multipart())
-	require.Nil(t, CtxFromRaw(map[string]any{"output_multipart": nil}).Multipart())
-	require.Nil(t, CtxFromRaw(map[string]any{
-		"output_multipart": map[string]any{
-			"part_urls": []any{},
-			"part_size": 0,
-		},
-	}).Multipart())
-	require.Nil(t, CtxFromRaw(map[string]any{
-		"output_multipart": map[string]any{
-			"part_urls":    []any{"u"},
-			"part_size":    5,
-			"complete_url": "",
-		},
-	}).Multipart())
-}
+// Tests that the context says whether the upload takes a stream, which only a
+// JSON true does, and that it reaches the upload every output goes through.
+func TestTheContextSaysWhetherTheUploadTakesAStream(t *testing.T) {
+	ctx := CtxFromRaw(map[string]any{"output_upload_stream": true})
+	require.True(t, ctx.OutputUploadStream)
+	require.True(t, ctx.upload().Stream)
 
-func TestMultipartIsReadFromRawDefensively(t *testing.T) {
-	multipart := CtxFromRaw(map[string]any{
-		"output_multipart": map[string]any{
-			"upload_id":    "u1",
-			"part_size":    json.Number("5242880"),
-			"part_urls":    []any{"https://a", "https://b"},
-			"complete_url": "https://c",
-		},
-	}).Multipart()
-
-	require.NotNil(t, multipart)
-	require.Equal(t, "u1", multipart.UploadID)
-	require.Equal(t, int64(5242880), multipart.PartSize)
-	require.Equal(t, []string{"https://a", "https://b"}, multipart.PartURLs)
-	require.Empty(t, multipart.AbortURL)
-	require.Equal(t, int64(2*5242880), multipart.Capacity())
+	for _, raw := range []map[string]any{
+		{},
+		{"output_upload_stream": false},
+		{"output_upload_stream": "true"},
+		{"output_upload_stream": float64(1)},
+	} {
+		require.False(t, CtxFromRaw(raw).OutputUploadStream, "%v", raw)
+	}
 }

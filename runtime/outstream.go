@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// OutputStream buffers records and decides between inlining, uploading, or multipart streaming on Close.
+// OutputStream buffers records and decides between inlining, uploading, or streaming them to the platform.
 type OutputStream struct {
 	ContentType ContentType
 	sink        *RowSink
@@ -14,7 +14,7 @@ type OutputStream struct {
 }
 
 // NewOutputStream creates a stream writer configured with inline thresholds and storage upload targets.
-func NewOutputStream(contentType ContentType, inlineMaxBytes int, upload *Upload, memoryLimitMB int, multipart *Multipart) *OutputStream {
+func NewOutputStream(contentType ContentType, inlineMaxBytes int, upload *Upload, memoryLimitMB int) *OutputStream {
 	limit := int64(inlineMaxBytes)
 	if limit <= 0 {
 		limit = DefaultInlineMaxBytes
@@ -22,7 +22,7 @@ func NewOutputStream(contentType ContentType, inlineMaxBytes int, upload *Upload
 
 	return &OutputStream{
 		ContentType: contentType,
-		sink:        NewRowSink(contentType, limit, bufferCap(limit, upload, memoryLimitMB), upload, multipart),
+		sink:        NewRowSink(contentType, limit, bufferCap(limit, upload, memoryLimitMB), upload),
 	}
 }
 

@@ -50,7 +50,8 @@ func IsResult(value any) bool {
 	return ok
 }
 
-// Upload is the presigned upload target for offloading large outputs.
+// Upload is where this run stores an output too big to return inline: the
+// platform's storage channel, and the key the output is stored under.
 type Upload struct {
 	URL string
 	Key string
@@ -59,11 +60,19 @@ type Upload struct {
 	// StorageFull says the organization's storage is full, so nothing can be
 	// stored.
 	StorageFull bool
+	// Stream says the upload may come in chunks with no length named, so rows
+	// past the inline limit leave as they come rather than being held.
+	Stream bool
 }
 
 // Offered reports whether this run was given somewhere to upload.
 func (u *Upload) Offered() bool {
 	return u != nil && u.URL != "" && u.Key != ""
+}
+
+// streams reports whether rows past the inline limit may stream.
+func (u *Upload) streams() bool {
+	return u.Offered() && u.Stream
 }
 
 // refuseFull refuses an output that must be stored while the organization's
@@ -275,7 +284,7 @@ func payload(output any, contentType ContentType) (any, error) {
 }
 
 // bufferCap determines how many encoded bytes may be buffered before the output
-// spills to a multipart upload or is refused.
+// is refused, when it cannot stream.
 func bufferCap(limit int64, upload *Upload, memoryLimitMB int) int64 {
 	if upload.Offered() && memoryLimitMB > 0 {
 		heap := float64(memoryLimitMB) * 1024 * 1024 * bufferBudget
@@ -319,7 +328,7 @@ func offload(data any, contentType ContentType, inlineSize, limit int64, upload 
 		return nil, err
 	}
 
-	if _, err := put(upload.URL, body, contentType); err != nil {
+	if err := store(upload.URL, body, contentType); err != nil {
 		return nil, err
 	}
 
@@ -350,29 +359,28 @@ func buildBlock(data any, contentType ContentType, limit int64, upload *Upload) 
 }
 
 // RowSink collects output rows, inlining them, uploading them in a single PUT,
-// or spilling to a multipart upload once they exceed the limits.
+// or streaming them to the platform once they exceed the limits.
 type RowSink struct {
 	contentType ContentType
 	limit       int64
 	cap         int64
 	upload      *Upload
-	multipart   *Multipart
 
 	collected []any
 	measured  int64
 	sizer     *compactEncoder
 	encoder   *RowEncoder
-	uploader  *PartUploader
+	uploader  *StreamUpload
 }
 
-// NewRowSink returns a sink that buffers rows up to limit and refuses beyond cap.
-func NewRowSink(contentType ContentType, limit, cap int64, upload *Upload, multipart *Multipart) *RowSink {
+// NewRowSink returns a sink that buffers rows up to limit, then streams them
+// when upload takes a stream, and refuses them beyond cap when it does not.
+func NewRowSink(contentType ContentType, limit, cap int64, upload *Upload) *RowSink {
 	return &RowSink{
 		contentType: contentType,
 		limit:       limit,
 		cap:         cap,
 		upload:      upload,
-		multipart:   multipart,
 		collected:   []any{},
 		measured:    2,
 		sizer:       newCompactEncoder(),
@@ -393,9 +401,9 @@ func refuseResultRow(row any) error {
 	return nil
 }
 
-// Add measures and buffers one row, spilling to the multipart upload once the
-// running total passes the inline limit, and refusing the output when it passes
-// what this node can hold in memory.
+// Add measures and buffers one row, streaming the rows once the running total
+// passes the inline limit when the upload takes a stream, and refusing the
+// output when it passes what this node can hold in memory when it does not.
 func (s *RowSink) Add(row any) error {
 	if err := refuseResultRow(row); err != nil {
 		return err
@@ -432,7 +440,7 @@ func (s *RowSink) Add(row any) error {
 		return err
 	}
 
-	if s.multipart != nil {
+	if s.upload.streams() {
 		return s.spill()
 	}
 
@@ -448,7 +456,7 @@ func (s *RowSink) Add(row any) error {
 	return nil
 }
 
-// Block finalizes buffered or multipart rows into an output block.
+// Block finalizes buffered or streamed rows into an output block.
 func (s *RowSink) Block() (*Block, error) {
 	if s.uploader == nil {
 		return buildBlock(s.collected, s.contentType, s.limit, s.upload)
@@ -476,18 +484,19 @@ func (s *RowSink) Block() (*Block, error) {
 	}, nil
 }
 
-// Abort cleans up any open multipart upload on cancellation or error.
+// Abort abandons any stream under way on cancellation or error, so none of it
+// is stored.
 func (s *RowSink) Abort() {
 	if s.uploader != nil {
 		s.uploader.Abort()
 	}
 }
 
-// spill switches from the in-memory buffer to a streaming multipart upload,
-// re-encoding the rows collected so far.
+// spill switches from the in-memory buffer to a stream, re-encoding the rows
+// collected so far.
 func (s *RowSink) spill() error {
 	s.encoder = NewRowEncoder(s.contentType)
-	s.uploader = NewPartUploader(s.multipart, s.contentType, s.upload.maxBytes())
+	s.uploader = OpenStream(s.upload.URL, s.contentType, s.upload.maxBytes())
 
 	for _, held := range s.collected {
 		encoded, err := s.encoder.Encode(held)
@@ -505,9 +514,9 @@ func (s *RowSink) spill() error {
 	return nil
 }
 
-// streamRows consumes an iterator into a RowSink, ensuring incomplete uploads are aborted on panic or error.
-func streamRows(output rows, contentType ContentType, limit, cap int64, upload *Upload, multipart *Multipart) (*Block, error) {
-	sink := NewRowSink(contentType, limit, cap, upload, multipart)
+// streamRows consumes an iterator into a RowSink, ensuring incomplete uploads are abandoned on panic or error.
+func streamRows(output rows, contentType ContentType, limit, cap int64, upload *Upload) (*Block, error) {
+	sink := NewRowSink(contentType, limit, cap, upload)
 
 	committed := false
 	defer func() {
@@ -533,7 +542,7 @@ func streamRows(output rows, contentType ContentType, limit, cap int64, upload *
 }
 
 // ToEnvelope formats the handler return value into a success envelope.
-func ToEnvelope(value any, inlineMaxBytes int, upload *Upload, memoryLimitMB int, multipart *Multipart) (*Envelope, error) {
+func ToEnvelope(value any, inlineMaxBytes int, upload *Upload, memoryLimitMB int) (*Envelope, error) {
 	var result resultParts
 
 	switch r, ok := value.(resultLike); {
@@ -562,11 +571,11 @@ func ToEnvelope(value any, inlineMaxBytes int, upload *Upload, memoryLimitMB int
 
 		switch {
 		case isRows(contentType) && isSequence(result.output):
-			block, err = streamRows(sequenceRows(result.output), contentType, limit, cap, upload, multipart)
+			block, err = streamRows(sequenceRows(result.output), contentType, limit, cap, upload)
 
 		case isRows(contentType) && isLazy(result.output):
 			lazy, _ := lazyRows(result.output)
-			block, err = streamRows(lazy, contentType, limit, cap, upload, multipart)
+			block, err = streamRows(lazy, contentType, limit, cap, upload)
 
 		default:
 			var data any
